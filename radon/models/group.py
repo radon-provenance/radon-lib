@@ -18,21 +18,17 @@ from dse.cqlengine.models import Model
 import json
 
 from radon.models.notification import Notification
-from radon.util import (
-    datetime_serializer,
-    default_uuid
-)
+from radon.util import datetime_serializer, default_uuid
 
 
 class Group(Model):
     """Group Model"""
+
     uuid = columns.Text(default=default_uuid)
     name = columns.Text(primary_key=True, required=True)
 
-
     def add_user(self, username):
         return self.add_users([username])
-
 
     def add_users(self, ls_users):
         """Add a list of users to a group
@@ -41,6 +37,7 @@ class Group(Model):
           - already_there for username already in the group
           - not_added for username not found"""
         from radon.models import User
+
         added = []
         not_added = []
         already_there = []
@@ -56,31 +53,30 @@ class Group(Model):
                 not_added.append(username)
         return added, not_added, already_there
 
-
     @classmethod
     def create(cls, **kwargs):
         """Create a new group, raise an exception if the group already
         exists"""
-        kwargs['name'] = kwargs['name'].strip()
-        if 'username' in kwargs:
-            username = kwargs['username']
-            del kwargs['username']
+        kwargs["name"] = kwargs["name"].strip()
+        if "username" in kwargs:
+            username = kwargs["username"]
+            del kwargs["username"]
         else:
             username = None
         # Make sure name id not in use.
-        existing = cls.objects.filter(name=kwargs['name']).first()
+        existing = cls.objects.filter(name=kwargs["name"]).first()
         if existing:
-            raise GroupConflictError(kwargs['name'])
+            raise GroupConflictError(kwargs["name"])
         grp = super(Group, cls).create(**kwargs)
         state = grp.mqtt_get_state()
         payload = grp.mqtt_payload({}, state)
         Notification.create_group(username, grp.name, payload)
         return grp
 
-
     def delete(self, username=None):
         # Can be improved, we need to remove the group for all the users
         from radon.models import User
+
         state = self.mqtt_get_state()
         for u in User.objects.all():
             if self.name in u.groups:
@@ -90,18 +86,15 @@ class Group(Model):
         payload = self.mqtt_payload(state, {})
         Notification.delete_group(username, self.name, payload)
 
-
     @classmethod
     def find(cls, name):
         """Find a group by name"""
         return cls.objects.filter(name=name).first()
 
-
     @classmethod
     def find_all(cls, namelist):
         """Find groups with a list of names"""
         return cls.objects.filter(name__in=namelist).all()
-
 
     def get_usernames(self):
         """Get a list of usernames of the group"""
@@ -110,30 +103,28 @@ class Group(Model):
         # queries won't let me query all users where this
         # objects ID appears in the User group field.
         from radon.models import User
-        return [u.name for u in User.objects.all()
-                if u.active and self.name in u.groups]
-        
+
+        return [
+            u.name for u in User.objects.all() if u.active and self.name in u.groups
+        ]
 
     def mqtt_get_state(self):
         """Get the group state for the payload"""
         payload = dict()
-        payload['uuid'] = self.uuid
-        payload['name'] = self.name
-        payload['members'] =  self.get_usernames()
+        payload["uuid"] = self.uuid
+        payload["name"] = self.name
+        payload["members"] = self.get_usernames()
         return payload
-
 
     def mqtt_payload(self, pre_state, post_state):
         """Get a string version of the payload of the message"""
         payload = dict()
-        payload['pre'] = pre_state
-        payload['post'] = post_state
+        payload["pre"] = pre_state
+        payload["post"] = post_state
         return json.dumps(payload, default=datetime_serializer)
-
 
     def rm_user(self, username):
         return self.rm_users([username])
-
 
     def rm_users(self, ls_users):
         """Remove a list of users from the group
@@ -142,6 +133,7 @@ class Group(Model):
             not_there for the usernames who weren't in the group
             not_exist for the usernames who don't exist"""
         from radon.models import User
+
         not_exist = []
         removed = []
         not_there = []
@@ -157,22 +149,16 @@ class Group(Model):
                 not_exist.append(username)
         return removed, not_there, not_exist
 
-
     def to_dict(self):
         """Return a dictionary that represents the group"""
-        return {
-            'uuid': self.uuid,
-            'name': self.name,
-            'members': self.get_usernames()
-        }
-
+        return {"uuid": self.uuid, "name": self.name, "members": self.get_usernames()}
 
     def update(self, **kwargs):
         """Update a group"""
         pre_state = self.mqtt_get_state()
-        if 'username' in kwargs:
-            username = kwargs['username']
-            del kwargs['username']
+        if "username" in kwargs:
+            username = kwargs["username"]
+            del kwargs["username"]
         else:
             username = None
         super(Group, self).update(**kwargs)
@@ -181,5 +167,3 @@ class Group(Model):
         payload = group.mqtt_payload(pre_state, post_state)
         Notification.update_group(username, group.name, payload)
         return self
-
-

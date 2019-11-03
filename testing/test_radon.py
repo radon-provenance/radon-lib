@@ -17,14 +17,10 @@ import unittest
 
 from radon import cfg
 
-from radon.models import (
-    initialise,
-    sync
-)
+from radon.models import initialise, sync
 
 
 class RadonTest(unittest.TestCase):
-
     def test_cfg(self):
         """Check that the global config variable is correctly set up and check
         that the type values are correct"""
@@ -34,14 +30,14 @@ class RadonTest(unittest.TestCase):
         assert isinstance(cfg.dse_repl_factor, int)
         assert isinstance(cfg.mqtt_host, str)
 
-
     def test_initialise(self):
         """Check the DSE connection"""
         initialise()
 
-
-    # I'm not sure it's wise to test this one on a production system as it 
+    # I'm not sure it's wise to test this one on a production system as it
     # may change the schemas
+
+
 #     def test_sync(self):
 #         """Check the sync method"""
 #         sync()

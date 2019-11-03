@@ -18,19 +18,9 @@ import logging
 import json
 
 
-from radon.models import (
-    DataObject,
-    TreeEntry,
-    User
-)
-from radon.models.acl import (
-    acemask_to_str,
-    serialize_acl_metadata
-)
-from radon.models.errors import (
-    NoSuchCollectionError,
-    ResourceConflictError
-)
+from radon.models import DataObject, TreeEntry, User
+from radon.models.acl import acemask_to_str, serialize_acl_metadata
+from radon.models.errors import NoSuchCollectionError, ResourceConflictError
 from radon.util import (
     datetime_serializer,
     decode_meta,
@@ -42,6 +32,7 @@ from radon.util import (
     split,
 )
 
+
 def is_reference(url):
     return not url.startswith("cassandra://")
 
@@ -49,8 +40,7 @@ def is_reference(url):
 class Resource(object):
     """Resource Model"""
 
-    logger = logging.getLogger('database')
-
+    logger = logging.getLogger("database")
 
     def __init__(self, entry, obj=None):
         self.entry = entry
@@ -66,10 +56,8 @@ class Resource(object):
         else:
             self.obj = None
 
-
     def __unicode__(self):
         return self.path
-
 
     def chunk_content(self):
         """Get a chunk of the data object"""
@@ -78,13 +66,22 @@ class Resource(object):
         else:
             return None
 
-
     @classmethod
-    def create(cls, container, name, uuid=None, metadata=None,
-               url=None, mimetype=None, username=None, size=None):
+    def create(
+        cls,
+        container,
+        name,
+        uuid=None,
+        metadata=None,
+        url=None,
+        mimetype=None,
+        username=None,
+        size=None,
+    ):
         """Create a new resource in the tree_entry table"""
         from radon.models import Collection
         from radon.models import Notification
+
         # Check if parent collection exists
         parent = Collection.find(container)
         if parent is None:
@@ -120,8 +117,7 @@ class Resource(object):
             obj_id = url.replace("cassandra://", "")
             data_obj = DataObject.find(obj_id)
             if metadata:
-                data_obj.update(mimetype=mimetype,
-                                metadata=metadata_cass)
+                data_obj.update(mimetype=mimetype, metadata=metadata_cass)
             else:
                 if mimetype:
                     data_obj.update(mimetype=mimetype)
@@ -138,14 +134,12 @@ class Resource(object):
         new.index()
         return new
 
-
     def create_acl_cdmi(self, cdmi_acl):
         """Add the ACL from a cdmi acl list, ACL are replaced"""
         if self.is_reference:
             self.entry.create_entry_acl_cdmi(cdmi_acl)
         else:
             self.obj.create_acl_cdmi(cdmi_acl)
-
 
     def create_acl_list(self, read_access, write_access):
         """Add the ACL from lists of group ids, ACL are replaced"""
@@ -154,25 +148,23 @@ class Resource(object):
         else:
             self.obj.create_acl_list(read_access, write_access)
 
-
     def delete(self, username=None):
         """Delete the resource in the tree_entry table and all the corresponding
         blobs"""
         from radon.models import Notification
+
         self.delete_blobs()
         self.entry.delete()
-        
+
         state = self.mqtt_get_state()
         payload = self.mqtt_payload(state, {})
         Notification.delete_resource(username, self.path, payload)
         self.reset()
 
-
     def delete_blobs(self):
         """Delete all blobs of the corresponding uuid"""
         if not self.is_reference:
             DataObject.delete_id(self.obj_id)
-
 
     @classmethod
     def find(cls, path):
@@ -183,7 +175,6 @@ class Resource(object):
             return None
         else:
             return cls(entries.first())
-
 
     def full_dict(self, user=None):
         """Return a dictionary which describes a resource for the web ui"""
@@ -198,19 +189,18 @@ class Resource(object):
             "mimetype": self.get_mimetype() or "application/octet-stream",
             "type": self.get_mimetype(),
             "create_ts": self.get_create_ts(),
-            "modified_ts": self.get_modified_ts()
+            "modified_ts": self.get_modified_ts(),
         }
         # Add fields when the object isn't a reference
         if self.obj:
             data["checksum"] = self.get_checksum()
             data["size"] = self.get_size()
         if user:
-            data['can_read'] = self.user_can(user, "read")
-            data['can_write'] = self.user_can(user, "write")
-            data['can_edit'] = self.user_can(user, "edit")
-            data['can_delete'] = self.user_can(user, "delete")
+            data["can_read"] = self.user_can(user, "read")
+            data["can_write"] = self.user_can(user, "write")
+            data["can_edit"] = self.user_can(user, "edit")
+            data["can_delete"] = self.user_can(user, "delete")
         return data
-
 
     def get_acl(self):
         if self.is_reference:
@@ -222,11 +212,9 @@ class Resource(object):
                     return self.entry.acl
             return self.obj.acl
 
-
     def get_acl_metadata(self):
         """Return a dictionary of acl based on the Resource schema"""
         return serialize_acl_metadata(self)
-
 
     def get_authorized_actions(self, user):
         """"Get available actions for user according to a group"""
@@ -235,6 +223,7 @@ class Resource(object):
         acl = self.get_acl()
         if not acl:
             from radon.models import Collection
+
             parent_container = Collection.find(self.container)
             return parent_container.get_authorized_actions(user)
         actions = set([])
@@ -255,12 +244,10 @@ class Resource(object):
                     actions.add("edit")
         return actions
 
-
     def get_cdmi_metadata(self):
         """Return the metadata associated to the object as a CDMI dictionary
         """
         return meta_cassandra_to_cdmi(self.get_metadata())
-
 
     def get_checksum(self):
         if self.is_reference:
@@ -272,7 +259,6 @@ class Resource(object):
                     return None
             return self.obj.checksum
 
-
     def get_create_ts(self):
         if self.is_reference:
             return self.entry.create_ts
@@ -283,11 +269,9 @@ class Resource(object):
                     return self.entry.create_ts
             return self.obj.create_ts
 
-
     def get_list_metadata(self):
         """Transform metadata to a list of couples for web ui"""
         return metadata_to_list(self.get_metadata())
-
 
     def get_metadata(self):
         if self.is_reference:
@@ -299,18 +283,16 @@ class Resource(object):
                     return self.entry.metadata
             return self.obj.metadata
 
-
     def get_metadata_key(self, key):
         """Return the value of a metadata"""
         return decode_meta(self.get_metadata().get(key, ""))
 
-
     def get_mimetype(self):
-#         if self.resource.get_mimetype():
-#             return self.resource.get_mimetype()
-#         mimetype = self.resource.get_metadata_key('cdmi_mimetype')
-#         if mimetype:
-#             return mimetype
+        #         if self.resource.get_mimetype():
+        #             return self.resource.get_mimetype()
+        #         mimetype = self.resource.get_metadata_key('cdmi_mimetype')
+        #         if mimetype:
+        #             return mimetype
         if self.is_reference:
             return self.entry.mimetype
         else:
@@ -319,7 +301,6 @@ class Resource(object):
                 if self.obj is None:
                     return self.entry.mimetype
             return self.obj.mimetype
-
 
     def get_modified_ts(self):
         if self.is_reference:
@@ -331,7 +312,6 @@ class Resource(object):
                     return self.entry.modified_ts
             return self.obj.modified_ts
 
-
     def get_name(self):
         """Return the name of a resource. If the resource is a reference we
         append a trailing '?' on the resource name"""
@@ -341,11 +321,9 @@ class Resource(object):
         else:
             return self.name
 
-
     def get_path(self):
         """Return the full path of the resource"""
         return self.path
-
 
     def get_size(self):
         if self.is_reference:
@@ -357,33 +335,30 @@ class Resource(object):
                     return 0
             return self.obj.size
 
-
     def index(self):
         from radon.models import SearchIndex
-        self.reset()
-        SearchIndex.index(self, ['name', 'metadata'])
 
+        self.reset()
+        SearchIndex.index(self, ["name", "metadata"])
 
     def mqtt_get_state(self):
         """Get the resource state for the payload"""
         payload = dict()
-        payload['uuid'] = self.uuid
-        payload['url'] = self.url
-        payload['container'] = self.container
-        payload['name'] = self.get_name()
-        payload['create_ts'] = self.get_create_ts()
-        payload['modified_ts'] = self.get_modified_ts()
-        payload['metadata'] = self.get_cdmi_metadata()
+        payload["uuid"] = self.uuid
+        payload["url"] = self.url
+        payload["container"] = self.container
+        payload["name"] = self.get_name()
+        payload["create_ts"] = self.get_create_ts()
+        payload["modified_ts"] = self.get_modified_ts()
+        payload["metadata"] = self.get_cdmi_metadata()
         return payload
-
 
     def mqtt_payload(self, pre_state, post_state):
         """Get a string version of the payload of the message"""
         payload = dict()
-        payload['pre'] = pre_state
-        payload['post'] = post_state
+        payload["pre"] = pre_state
+        payload["post"] = post_state
         return json.dumps(payload, default=datetime_serializer)
-
 
     def get_acl_list(self):
         """Return two list of groups id which have read and write access"""
@@ -403,11 +378,10 @@ class Resource(object):
                 pass
         return read_access, write_access
 
-
     def reset(self):
         from radon.models import SearchIndex
-        SearchIndex.reset(self.path)
 
+        SearchIndex.reset(self.path)
 
     def simple_dict(self, user=None):
         """Return a dictionary which describes a resource for the web ui"""
@@ -421,40 +395,39 @@ class Resource(object):
             "type": self.get_mimetype(),
         }
         if user:
-            data['can_read'] = self.user_can(user, "read")
-            data['can_write'] = self.user_can(user, "write")
-            data['can_edit'] = self.user_can(user, "edit")
-            data['can_delete'] = self.user_can(user, "delete")
+            data["can_read"] = self.user_can(user, "read")
+            data["can_write"] = self.user_can(user, "write")
+            data["can_edit"] = self.user_can(user, "edit")
+            data["can_delete"] = self.user_can(user, "delete")
         return data
-
 
     def to_dict(self, user=None):
         return self.simple_dict(user)
 
-
     def update(self, **kwargs):
         """Update a resource"""
         from radon.models import Notification
+
         pre_state = self.mqtt_get_state()
-        kwargs['modified_ts'] = datetime.now()
-        
+        kwargs["modified_ts"] = datetime.now()
+
         # user_uuid used for Notification
-        if 'username' in kwargs:
-            username = kwargs['username']
-            del kwargs['username']
+        if "username" in kwargs:
+            username = kwargs["username"]
+            del kwargs["username"]
         else:
             username = None
 
         # Metadata given in cdmi format are transformed to be stored in Cassandra
-        if 'metadata' in kwargs:
-            kwargs['metadata'] = meta_cdmi_to_cassandra(kwargs['metadata'])
+        if "metadata" in kwargs:
+            kwargs["metadata"] = meta_cdmi_to_cassandra(kwargs["metadata"])
 
         if self.is_reference:
             self.entry.update(**kwargs)
         else:
-            if 'url' in kwargs:
-                self.entry.update(url=kwargs['url'])
-                del kwargs['url']
+            if "url" in kwargs:
+                self.entry.update(url=kwargs["url"])
+                del kwargs["url"]
             self.obj.update(**kwargs)
 
         resc = Resource.find(self.path)
@@ -465,7 +438,6 @@ class Resource(object):
         # Index the resource
         resc.index()
 
-
     def update_acl_cdmi(self, cdmi_acl):
         """Update the ACL from a cdmi list of ACE"""
         if self.is_reference:
@@ -474,7 +446,6 @@ class Resource(object):
             if self.obj:
                 self.obj.update_acl_cdmi(cdmi_acl)
 
-
     def update_acl_list(self, read_access, write_access):
         """Update the ACL from a cdmi list of ACE"""
         if self.is_reference:
@@ -482,7 +453,6 @@ class Resource(object):
         else:
             if self.obj:
                 self.obj.update_acl_cdmi(read_access, write_access)
-
 
     def user_can(self, user, action):
         """
@@ -496,5 +466,3 @@ class Resource(object):
         if action in actions:
             return True
         return False
-
-

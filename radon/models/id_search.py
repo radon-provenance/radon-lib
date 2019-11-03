@@ -17,16 +17,15 @@ from dse.cqlengine import columns
 from dse.cqlengine.models import Model
 
 
-
 class IDSearch(Model):
     """Reverse Search Model (lookup table for search from object_path)
     """
+
     object_path = columns.Text(required=True, primary_key=True)
     term = columns.Text(required=True, primary_key=True)
     term_type = columns.Text(required=True, primary_key=True)
-    
+
     @classmethod
     def find(cls, object_path):
         """Find all terms associated to an object id"""
         return cls.objects.filter(object_path=object_path).all()
-

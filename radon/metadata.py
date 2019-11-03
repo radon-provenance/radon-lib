@@ -41,19 +41,23 @@ COLLECTION_METADATA = []
 
 def get_resource_keys(fileobj=None):
     ensure_metadata(fileobj=fileobj)
-    return [r['name'] for r in RESOURCE_METADATA]
+    return [r["name"] for r in RESOURCE_METADATA]
+
 
 def get_collection_keys(fileobj=None):
     ensure_metadata(fileobj=fileobj)
-    return [c['name'] for c in COLLECTION_METADATA]
+    return [c["name"] for c in COLLECTION_METADATA]
+
 
 def get_resource_validator(fileobj=None):
     ensure_metadata(fileobj=fileobj)
     return MetadataValidator(RESOURCE_METADATA)
 
+
 def get_collection_validator(fileobj=None):
     ensure_metadata(fileobj=fileobj)
     return MetadataValidator(COLLECTION_METADATA)
+
 
 def ensure_metadata(reload=False, fileobj=None):
     """
@@ -68,13 +72,14 @@ def ensure_metadata(reload=False, fileobj=None):
 
     try:
         if not fileobj:
-            fileobj = open(os.environ.get('RADON_METADATA', ''), 'r')
+            fileobj = open(os.environ.get("RADON_METADATA", ""), "r")
         data = fileobj.read()
         obj = json.loads(data)
-        RESOURCE_METADATA = obj['resources']
-        COLLECTION_METADATA = obj['collections']
+        RESOURCE_METADATA = obj["resources"]
+        COLLECTION_METADATA = obj["collections"]
     except Exception as e:
         print("$RADON_METADATA is not set")
+
 
 class MetadataValidator(object):
     """
@@ -86,10 +91,9 @@ class MetadataValidator(object):
     def __init__(self, collection, *args, **kwargs):
         self.rules = {}
         for item in collection:
-            name = item['name']
+            name = item["name"]
             self.rules[name] = item
         super(MetadataValidator, self).__init__(*args, **kwargs)
-
 
     def validate(self, input_data):
         """
@@ -103,17 +107,19 @@ class MetadataValidator(object):
             if not k in self.rules:
                 continue
 
-            required = self.rules[k].get('required', False)
+            required = self.rules[k].get("required", False)
             if required and not v.strip():
-                validation_errors.append(u'{} is a required field'.format(k))
+                validation_errors.append(u"{} is a required field".format(k))
                 err = True
 
-            choices = self.rules[k].get('choices', [])
+            choices = self.rules[k].get("choices", [])
             if not err and choices and not v in choices:
                 if v.strip() or required:
-                    validation_errors.append(u'{} is not a valid option for the {} field, choices are: {}'.format(v.strip() or '""', k, ','.join(choices)))
+                    validation_errors.append(
+                        u"{} is not a valid option for the {} field, choices are: {}".format(
+                            v.strip() or '""', k, ",".join(choices)
+                        )
+                    )
                     err = True
 
         return len(validation_errors) == 0, validation_errors
-
-

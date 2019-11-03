@@ -18,8 +18,6 @@ import unittest
 from radon.cli import RadonApplication
 
 
-
 class CLITest(unittest.TestCase):
-
     def test_1(self):
         assert (5) == 5

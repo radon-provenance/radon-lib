@@ -15,10 +15,7 @@ limitations under the License.
 
 import base64
 from crcmod.predefined import mkPredefinedCrcFun
-from datetime import (
-    datetime,
-    timedelta
-)
+from datetime import datetime, timedelta
 from dse.util import uuid_from_time
 import json
 import os
@@ -30,8 +27,6 @@ import uuid
 IDENT_PEN = 42223
 # CDMI ObjectId Length: 8 bits header + 16bits uuid
 IDENT_LEN = 24
-
-
 
 
 def _calculate_CRC16(id_):
@@ -58,7 +53,7 @@ def _calculate_CRC16(id_):
     id_[6] = 0
     id_[7] = 0
     # Need to generate CRC func
-    crc16fun = mkPredefinedCrcFun('crc-16')
+    crc16fun = mkPredefinedCrcFun("crc-16")
     crc16 = crc16fun(id_)
     # Return a 2 byte string representation of the resulting integer
     # in network byte order (big-endian)
@@ -81,14 +76,14 @@ def _get_blankID():
 
     """
     id_length = IDENT_LEN
-# TODO: add exceptions back
-#     if id_length < 9 or id_length > 40:
-#         raise InvalidOptionConfigException(
-#             'identifiers',
-#             'length',
-#             id_length,
-#             "Identifier length must be at least 9 and no more than 40"
-#         )
+    # TODO: add exceptions back
+    #     if id_length < 9 or id_length > 40:
+    #         raise InvalidOptionConfigException(
+    #             'identifiers',
+    #             'length',
+    #             id_length,
+    #             "Identifier length must be at least 9 and no more than 40"
+    #         )
     id_ = bytearray([0] * id_length)
     # Set IANA Private Enterprise Number
     #
@@ -135,7 +130,7 @@ def decode_meta(value):
     try:
         # Values are stored as json strings {'json': val}
         val_json = json.loads(value)
-        val = val_json.get('json', '')
+        val = val_json.get("json", "")
     except ValueError:
         val = value
     return val
@@ -151,7 +146,7 @@ def default_cdmi_id():
     struct.pack_into("!16s", id_, 8, uid.bytes)
     # Calculate and insert the CRC-16
     id_ = _insert_CRC16(id_)
-    
+
     bytes_id = base64.b16encode(id_)
     return bytes_id.decode()
 
@@ -194,7 +189,7 @@ def merge(coll_name, resc_name):
     :param resc_name: basestring
     :return:
     """
-    if coll_name == '/':
+    if coll_name == "/":
         # For root we don't add the extra '/'
         return u"{}{}".format(coll_name, resc_name)
     else:
@@ -211,7 +206,7 @@ def meta_cassandra_to_cdmi(metadata):
         try:
             # Values are stored as json strings {'json': val}
             val_json = json.loads(v)
-            val = val_json.get('json', '')
+            val = val_json.get("json", "")
             # meta with no values are deleted (not easy to delete them with
             # cqlengine)
             if val:
@@ -249,7 +244,7 @@ def metadata_to_list(metadata):
     for k, v in metadata.items():
         try:
             val_json = json.loads(v)
-            val = val_json.get('json', '')
+            val = val_json.get("json", "")
             # If the value is a list we create several pairs in the result
             if isinstance(val, list):
                 for el in val:
@@ -275,4 +270,4 @@ def split(path):
 
 
 def verify_password(pw1, pw2):
-        return pbkdf2_sha256.verify(pw1, pw2)
+    return pbkdf2_sha256.verify(pw1, pw2)

@@ -19,14 +19,8 @@ from dse.query import SimpleStatement
 import json
 
 from radon import cfg
-from radon.models import (
-    TreeEntry,
-    User
-)
-from radon.models.acl import (
-    acemask_to_str,
-    serialize_acl_metadata
-)
+from radon.models import TreeEntry, User
+from radon.models.acl import acemask_to_str, serialize_acl_metadata
 from radon.util import (
     datetime_serializer,
     decode_meta,
@@ -39,7 +33,7 @@ from radon.util import (
 from radon.models.errors import (
     CollectionConflictError,
     ResourceConflictError,
-    NoSuchCollectionError
+    NoSuchCollectionError,
 )
 
 # import logging
@@ -51,7 +45,7 @@ class Collection(object):
     def __init__(self, entry):
         self.entry = entry
 
-        self.is_root = (self.entry.name == "." and self.entry.container == '/')
+        self.is_root = self.entry.name == "." and self.entry.container == "/"
         # Get name
         if self.is_root:
             self.name = u"Home"
@@ -62,12 +56,12 @@ class Collection(object):
         self.uuid = self.entry.uuid
         self.create_ts = self.entry.container_create_ts
 
-
     @classmethod
-    def create(cls, name, container='/', metadata=None, username=None):
+    def create(cls, name, container="/", metadata=None, username=None):
         """Create a new collection"""
         from radon.models import Notification
         from radon.models import Resource
+
         path = merge(container, name)
         # Check if parent collection exists
         parent = Collection.find(container)
@@ -84,21 +78,25 @@ class Collection(object):
         # will fail as it tries to delete a static column
         if metadata:
             metadata_cass = meta_cdmi_to_cassandra(metadata)
-            coll_entry = TreeEntry.create(container=path,
-                                          name='.',
-                                          container_create_ts=now,
-                                          container_modified_ts=now,
-                                          container_metadata=metadata_cass)
+            coll_entry = TreeEntry.create(
+                container=path,
+                name=".",
+                container_create_ts=now,
+                container_modified_ts=now,
+                container_metadata=metadata_cass,
+            )
         else:
-            coll_entry = TreeEntry.create(container=path,
-                                          name='.',
-                                          container_create_ts=now,
-                                          container_modified_ts=now)
+            coll_entry = TreeEntry.create(
+                container=path,
+                name=".",
+                container_create_ts=now,
+                container_modified_ts=now,
+            )
         coll_entry.update(uuid=coll_entry.container_uuid)
-        child_entry = TreeEntry.create(container=container,
-                                       name=name + '/',
-                                       uuid=coll_entry.container_uuid)
-        
+        child_entry = TreeEntry.create(
+            container=container, name=name + "/", uuid=coll_entry.container_uuid
+        )
+
         new = Collection.find(path)
 
         state = new.mqtt_get_state()
@@ -108,29 +106,26 @@ class Collection(object):
         new.index()
         return new
 
-
-
     @classmethod
     def create_root(cls):
         """Create the root container"""
         now = datetime.now()
-        root_entry = TreeEntry.create(container='/',
-                                      name='.',
-                                      container_create_ts=now,
-                                      container_modified_ts=now)
+        root_entry = TreeEntry.create(
+            container="/", name=".", container_create_ts=now, container_modified_ts=now
+        )
         root_entry.update(uuid=root_entry.container_uuid)
         root_entry.add_default_acl()
-        
-        root = cls(root_entry)
-        
-        return root
 
+        root = cls(root_entry)
+
+        return root
 
     @classmethod
     def delete_all(cls, path, username=None):
         """Delete recursively all sub-collections and all resources contained
         in a collection at 'path'"""
         from radon.models import Resource
+
         parent = Collection.find(path)
         if not parent:
             return
@@ -142,7 +137,6 @@ class Collection(object):
         for collection in collections:
             Collection.delete_all(collection.path, username)
         parent.delete(username)
-
 
     @classmethod
     def find(cls, path):
@@ -162,22 +156,20 @@ class Collection(object):
             Collection.create_root()
         return root
 
-
     def create_acl_list(self, read_access, write_access):
         """Create ACL in the tree entry table from two lists of groups id,
         existing ACL are replaced"""
         self.entry.create_container_acl_list(read_access, write_access)
-
 
     def create_acl_cdmi(self, cdmi_acl):
         """Create ACL in the tree entry table from ACL in the cdmi format (list
         of ACE dictionary), existing ACL are replaced"""
         self.entry.create_container_acl_cdmi(cdmi_acl)
 
-
     def delete(self, username=None):
         """Delete a collection and the associated row in the tree entry table"""
         from radon.models import Notification
+
         if self.is_root:
             return
         session = connection.get_session()
@@ -186,21 +178,20 @@ class Collection(object):
         query = SimpleStatement("""DELETE FROM tree_entry WHERE container=%s""")
         session.execute(query, (self.path,))
         # Get the row that describe the collection as a child of its parent
-        child = TreeEntry.objects.filter(container=self.container,
-                                           name=u"{}/".format(self.name)).first()
+        child = TreeEntry.objects.filter(
+            container=self.container, name=u"{}/".format(self.name)
+        ).first()
         if child:
             child.delete()
-        
+
         state = self.mqtt_get_state()
         payload = self.mqtt_payload(state, {})
         Notification.delete_collection(username, self.path, payload)
         self.reset()
 
-
     def get_acl(self):
         """Return a dictionary of acl based on the Collection schema"""
         return self.entry.container_acl
-
 
     def get_acl_list(self):
         """Return two list of groups id which have read and write access"""
@@ -220,11 +211,9 @@ class Collection(object):
                 pass
         return read_access, write_access
 
-
     def get_acl_metadata(self):
         """Return a dictionary of acl based on the Collection schema"""
         return serialize_acl_metadata(self)
-
 
     def get_authorized_actions(self, user):
         """"Get available actions for user according to a group"""
@@ -254,16 +243,15 @@ class Collection(object):
                     actions.add("edit")
         return actions
 
-
     def get_child(self):
         """Return two lists for child container and child dataobjects"""
         entries = TreeEntry.objects.filter(container=self.path)
         child_container = []
         child_dataobject = []
         for entry in list(entries):
-            if entry.name == '.':
+            if entry.name == ".":
                 continue
-            elif entry.name.endswith('/'):
+            elif entry.name.endswith("/"):
                 child_container.append(entry.name[:-1])
             else:
                 child_dataobject.append(entry.name)
@@ -273,16 +261,13 @@ class Collection(object):
         child_container, child_dataobject = self.get_child()
         return len(child_dataobject)
 
-
     def get_cdmi_metadata(self):
         """Return a dictionary of metadata"""
         return meta_cassandra_to_cdmi(self.entry.container_metadata)
 
-
     def get_list_metadata(self):
         """Transform metadata to a list of couples for web ui"""
         return metadata_to_list(self.entry.container_metadata)
-
 
     def get_metadata_key(self, key):
         """Return the value of a metadata"""
@@ -290,32 +275,32 @@ class Collection(object):
 
     def index(self):
         from radon.models import SearchIndex
+
         self.reset()
-        SearchIndex.index(self, ['name', 'metadata'])
+        SearchIndex.index(self, ["name", "metadata"])
 
     def mqtt_get_state(self):
         """Get the collection state for the payload"""
         payload = dict()
-        payload['uuid'] = self.uuid
-        payload['container'] = self.container
-        payload['name'] = self.name
-        payload['create_ts'] = self.create_ts
-        payload['modified_ts'] = self.entry.container_modified_ts
-        payload['metadata'] = self.get_cdmi_metadata()
+        payload["uuid"] = self.uuid
+        payload["container"] = self.container
+        payload["name"] = self.name
+        payload["create_ts"] = self.create_ts
+        payload["modified_ts"] = self.entry.container_modified_ts
+        payload["metadata"] = self.get_cdmi_metadata()
         return payload
-
 
     def mqtt_payload(self, pre_state, post_state):
         """Get a string version of the payload of the message"""
         payload = dict()
-        payload['pre'] = pre_state
-        payload['post'] = post_state
+        payload["pre"] = pre_state
+        payload["post"] = post_state
         return json.dumps(payload, default=datetime_serializer)
 
     def reset(self):
         from radon.models import SearchIndex
-        SearchIndex.reset(self.path)
 
+        SearchIndex.reset(self.path)
 
     def to_dict(self, user=None):
         """Return a dictionary which describes a collection for the web ui"""
@@ -325,30 +310,30 @@ class Collection(object):
             "name": self.name,
             "path": self.path,
             "created": self.create_ts,
-            "metadata": self.get_list_metadata()
+            "metadata": self.get_list_metadata(),
         }
         if user:
-            data['can_read'] = self.user_can(user, "read")
-            data['can_write'] = self.user_can(user, "write")
-            data['can_edit'] = self.user_can(user, "edit")
-            data['can_delete'] = self.user_can(user, "delete")
+            data["can_read"] = self.user_can(user, "read")
+            data["can_write"] = self.user_can(user, "write")
+            data["can_edit"] = self.user_can(user, "edit")
+            data["can_delete"] = self.user_can(user, "delete")
         return data
-
 
     def update(self, **kwargs):
         """Update a collection"""
         from radon.models import Notification
+
         pre_state = self.mqtt_get_state()
-        kwargs['container_modified_ts'] = datetime.now()
-        if 'metadata' in kwargs:
+        kwargs["container_modified_ts"] = datetime.now()
+        if "metadata" in kwargs:
             # Transform the metadata in cdmi format to the format stored in
             # Cassandra
-            metadata = meta_cdmi_to_cassandra(kwargs['metadata'])
-            kwargs['container_metadata'] = metadata
-            del kwargs['metadata']
-        if 'username' in kwargs:
-            username = kwargs['username']
-            del kwargs['username']
+            metadata = meta_cdmi_to_cassandra(kwargs["metadata"])
+            kwargs["container_metadata"] = metadata
+            del kwargs["metadata"]
+        if "username" in kwargs:
+            username = kwargs["username"]
+            del kwargs["username"]
         else:
             username = None
         self.entry.update(**kwargs)
@@ -358,18 +343,15 @@ class Collection(object):
         Notification.update_collection(username, coll.path, payload)
         coll.index()
 
-
     def update_acl_list(self, read_access, write_access):
         """Update ACL in the tree entry table from two lists of groups id,
         existing ACL are replaced"""
         self.entry.update_container_acl_list(read_access, write_access)
 
-
     def update_acl_cdmi(self, cdmi_acl):
         """Update ACL in the tree entry table from ACL in the cdmi format (list
         of ACE dictionary), existing ACL are replaced"""
         self.entry.update_container_acl_cdmi(cdmi_acl)
-
 
     def user_can(self, user, action):
         """
@@ -383,5 +365,3 @@ class Collection(object):
         if action in actions:
             return True
         return False
-
-

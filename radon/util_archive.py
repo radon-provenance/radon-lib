@@ -32,4 +32,3 @@ def is_resource(path):
 def path_exists(path):
     """Check if the path is already in use"""
     return is_resource(path) or is_collection(path)
-

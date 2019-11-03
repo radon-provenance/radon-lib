@@ -13,23 +13,28 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+
 class BaseError(Exception):
     """Base Exception."""
+
     pass
 
 
 class NoReadAccessError(BaseError):
     """ACL Exception for read access."""
+
     pass
 
 
 class NoWriteAccessError(BaseError):
     """ACL Exception for write access."""
+
     pass
 
 
 class NoSuchDriverError(BaseError):
     """"""
+
     pass
 
 
@@ -106,11 +111,12 @@ class UndiagnosedModelError(ModelError):
         self.exc = exc
 
     def __str__(self):
-        return ("Operation on {0} caused an exception:\n{1}"
-                "".format(self.path, self.exc)
-                )
+        return "Operation on {0} caused an exception:\n{1}" "".format(
+            self.path, self.exc
+        )
 
 
 class UniqueError(BaseError):
     """Uniqueness error"""
+
     pass

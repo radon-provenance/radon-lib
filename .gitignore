@@ -3,6 +3,7 @@
 .idea/
 .project
 .pydevproject
+.settings
 
 # Vagrant
 .vagrant/

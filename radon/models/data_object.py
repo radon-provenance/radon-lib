@@ -16,17 +16,12 @@ limitations under the License.
 from io import BytesIO
 import zipfile
 from datetime import datetime
-from dse.cqlengine import (
-    columns,
-    connection
-)
+from dse.cqlengine import columns, connection
 from dse.query import SimpleStatement
 from dse.cqlengine.models import Model
 
 from radon import cfg
-from radon.models import (
-    Group,
-)
+from radon.models import Group
 from radon.models.acl import (
     Ace,
     acl_cdmi_to_cql,
@@ -38,16 +33,18 @@ from radon.models.acl import (
 from radon.util import default_cdmi_id
 
 
-static_fields = ["checksum",
-                 "size",
-                 "metadata",
-                 "mimetype",
-                 "alt_url",
-                 "create_ts",
-                 "modified_ts",
-                 "type",
-                 "acl",
-                 "treepath"]
+static_fields = [
+    "checksum",
+    "size",
+    "metadata",
+    "mimetype",
+    "alt_url",
+    "create_ts",
+    "modified_ts",
+    "type",
+    "acl",
+    "treepath",
+]
 
 
 class DataObject(Model):
@@ -64,9 +61,9 @@ class DataObject(Model):
 
     N.B. by default Cassandra compresses its data ( using LZW ), so we get that
     for free."""
+
     # The 'name' of the object
-    uuid = columns.Text(default=default_cdmi_id, required=True,
-                        partition_key=True)
+    uuid = columns.Text(default=default_cdmi_id, required=True, partition_key=True)
     #####################
     # These columns are the same (shared) between all entries with same id
     # (they use the static attribute , [ like an inode or a header ])
@@ -78,7 +75,7 @@ class DataObject(Model):
     alt_url = columns.Set(columns.Text, static=True)
     create_ts = columns.DateTime(default=datetime.now, static=True)
     modified_ts = columns.DateTime(default=datetime.now, static=True)
-    type = columns.Text(required=False, static=True, default='UNKNOWN')
+    type = columns.Text(required=False, static=True, default="UNKNOWN")
     acl = columns.Map(columns.Text, columns.UserDefinedType(Ace), static=True)
     # A general aid to integrity ...
     treepath = columns.Text(static=True, required=False)
@@ -105,13 +102,11 @@ class DataObject(Model):
             f.close()
         else:
             data = raw_data
-        data_object = cls(uuid=uuid,
-                          sequence_number=sequence_number,
-                          blob=data,
-                          compressed=compressed)
+        data_object = cls(
+            uuid=uuid, sequence_number=sequence_number, blob=data, compressed=compressed
+        )
         data_object.save()
         return data_object
-
 
     def chunk_content(self):
         """
@@ -123,7 +118,7 @@ class DataObject(Model):
         for entry in entries:
             if entry.compressed:
                 data = StringIO(entry.blob)
-                z = zipfile.ZipFile(data, 'r')
+                z = zipfile.ZipFile(data, "r")
                 content = z.read("data")
                 data.close()
                 z.close()
@@ -131,9 +126,10 @@ class DataObject(Model):
             else:
                 yield entry.blob
 
-
     @classmethod
-    def create(cls, raw_data, compressed=False, metadata=None, create_ts=None, acl=None):
+    def create(
+        cls, raw_data, compressed=False, metadata=None, create_ts=None, acl=None
+    ):
         """data: initial data"""
         new_id = default_cdmi_id()
         now = datetime.now()
@@ -146,47 +142,47 @@ class DataObject(Model):
             f.close()
         else:
             data = raw_data
-        
+
         kwargs = {
             "uuid": new_id,
             "sequence_number": 0,
             "blob": data,
             "compressed": compressed,
-            "modified_ts": now
+            "modified_ts": now,
         }
         if metadata:
-            kwargs['metadata'] = metadata
+            kwargs["metadata"] = metadata
         if create_ts:
-            kwargs['create_ts'] = create_ts
+            kwargs["create_ts"] = create_ts
         else:
-            kwargs['create_ts'] = now
+            kwargs["create_ts"] = now
         if acl:
-            kwargs['acl'] = acl
+            kwargs["acl"] = acl
         new = super(DataObject, cls).create(**kwargs)
         return new
-
 
     def create_acl(self, acl_cql):
         """Replace the static acl with the given cql string"""
         session = connection.get_session()
         keyspace = cfg.dse_keyspace
         session.set_keyspace(keyspace)
-        query = SimpleStatement(u"""UPDATE data_object SET acl = {}
-            WHERE uuid=%s""".format(acl_cql))
+        query = SimpleStatement(
+            u"""UPDATE data_object SET acl = {}
+            WHERE uuid=%s""".format(
+                acl_cql
+            )
+        )
         session.execute(query, (self.uuid,))
-
 
     def create_acl_cdmi(self, cdmi_acl):
         """""Create entry ACL from a cdmi object (list of dict)"""
         cql_string = acl_cdmi_to_cql(cdmi_acl)
         self.create_acl(cql_string)
 
-
     def create_acl_list(self, read_access, write_access):
         """Create ACL from two lists of groups id, existing ACL are replaced"""
         cql_string = acl_list_to_cql(read_access, write_access)
         self.create_acl(cql_string)
-
 
     @classmethod
     def delete_id(cls, uuid):
@@ -197,7 +193,6 @@ class DataObject(Model):
         query = SimpleStatement("""DELETE FROM data_object WHERE uuid=%s""")
         session.execute(query, (uuid,))
 
-
     @classmethod
     def find(cls, uuid):
         """Find an object by uuid"""
@@ -207,7 +202,6 @@ class DataObject(Model):
         else:
             return entries.first()
 
-
     def update(self, **kwargs):
         """Update a data object"""
         session = connection.get_session()
@@ -216,15 +210,22 @@ class DataObject(Model):
         for arg in kwargs:
             # For static fields we can't use the name in the where condition
             if arg in static_fields:
-                query = SimpleStatement("""UPDATE data_object SET {}=%s
-                    WHERE uuid=%s""".format(arg))
+                query = SimpleStatement(
+                    """UPDATE data_object SET {}=%s
+                    WHERE uuid=%s""".format(
+                        arg
+                    )
+                )
                 session.execute(query, (kwargs[arg], self.uuid))
             else:
-                query = SimpleStatement("""UPDATE data_object SET {}=%s
-                    WHERE uuid=%s and sequence_number=%s""".format(arg))
+                query = SimpleStatement(
+                    """UPDATE data_object SET {}=%s
+                    WHERE uuid=%s and sequence_number=%s""".format(
+                        arg
+                    )
+                )
                 session.execute(query, (kwargs[arg], self.uuid, self.sequence_number))
         return self
-
 
     def update_acl(self, acl_cql):
         """Update the static acl with the given cql string
@@ -232,19 +233,20 @@ class DataObject(Model):
         session = connection.get_session()
         keyspace = cfg.dse_keyspace
         session.set_keyspace(keyspace)
-        query = SimpleStatement(u"""UPDATE data_object SET acl = acl + {}
-            WHERE uuid=%s""".format(acl_cql))
+        query = SimpleStatement(
+            u"""UPDATE data_object SET acl = acl + {}
+            WHERE uuid=%s""".format(
+                acl_cql
+            )
+        )
         session.execute(query, (self.uuid,))
-
 
     def update_acl_cdmi(self, cdmi_acl):
         """"Update entry ACL from a cdmi object (list of dict)"""
         cql_string = acl_cdmi_to_cql(cdmi_acl)
         self.update_acl(cql_string)
 
-
     def update_acl_list(self, read_access, write_access):
         """Update ACL from two lists of groups id, existing ACL are replaced"""
         cql_string = acl_list_to_cql(read_access, write_access)
         self.update_acl(cql_string)
-

@@ -13,30 +13,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from setuptools import (
-    find_packages,
-    setup
-)
+from setuptools import find_packages, setup
 
 import radon
 
 
 setup(
-    name='radon',
+    name="radon",
     version=radon.__version__,
-    description='Radon core library',
+    description="Radon core library",
     extras_require={},
     long_description="Radon library for Radon development",
-    author='Jerome Fuselier',
-    maintainer_email='',
+    author="Jerome Fuselier",
+    maintainer_email="",
     license="Apache License, Version 2.0",
     url="",
     packages=find_packages(),
-    entry_points={
-        'console_scripts': [
-            "radmin = radon.cli:main"
-        ],
-    },
+    entry_points={"console_scripts": ["radmin = radon.cli:main"],},
     classifiers=[
         "Development Status :: 4 - Beta",
         "License :: OSI Approved :: Apache Software License",
