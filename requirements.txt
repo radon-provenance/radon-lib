@@ -1,7 +1,7 @@
 blessings
 crcmod==1.7
 docopt
-dse-driver==2.10.0
+dse-driver==2.11.0
 passlib==1.6.2
 paho-mqtt==1.4
 python-dotenv
