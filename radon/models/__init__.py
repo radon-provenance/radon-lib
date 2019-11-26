@@ -70,7 +70,7 @@ def initialise():
                 load_balancing_policy=DCAwareRoundRobinPolicy(),
             )
 
-            if strategy is "SimpleStrategy":
+            if cfg.dse_strategy is "SimpleStrategy":
                 create_keyspace_simple(keyspace, repl_factor, True)
             else:
                 create_keyspace_network_topology(keyspace, {}, True)
