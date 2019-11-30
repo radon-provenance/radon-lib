@@ -1,4 +1,4 @@
-"""Copyright 2019 - 
+"""Copyright 2019 -
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -35,13 +35,12 @@ Options:
   --version      Show version.
 """
 
-import blessings
-import docopt
 from getpass import getpass
 import logging
-import os
 import string
 import random
+import blessings
+import docopt
 
 import radon
 from radon.models import Group, initialise, sync, User
@@ -53,7 +52,7 @@ def random_password(length=10):
     return "".join(random.choice(letters) for i in range(length))
 
 
-class RadonApplication(object):
+class RadonApplication():
     """Methods for the CLI"""
 
     def __init__(self):
@@ -91,7 +90,7 @@ class RadonApplication(object):
                 msg = "Users {} don't exist"
             self.print_error(msg.format(", ".join(not_added)))
 
-    def create(self, args):
+    def create(self):
         """Create the keyspace and the tables"""
         sync()
 
@@ -202,7 +201,7 @@ class RadonApplication(object):
             self.print_error("Username {} already exists".format(name))
             return
         admin = input("Is this an administrator? [y/N] ")
-        pwd = password = random_password(20)
+        pwd = random_password(20)
         User.create(
             name=name,
             password=pwd,
@@ -344,7 +343,7 @@ def main():
     if arguments["atg"]:
         return app.add_to_group(arguments)
     elif arguments["create"]:
-        return app.create(arguments)
+        return app.create()
     elif arguments["lg"]:
         return app.list_groups(arguments)
     elif arguments["lu"]:
@@ -363,6 +362,7 @@ def main():
         return app.rm_group(arguments)
     elif arguments["rmuser"]:
         return app.rm_user(arguments)
+    return
 
 
 if __name__ == "__main__":

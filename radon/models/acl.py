@@ -176,7 +176,7 @@ def aceflag_to_cdmi_str(num_value):
     :rtype: string
     """
     res = []
-    for idx in xrange(len(ACEFLAG_TABLE)):
+    for idx in range(len(ACEFLAG_TABLE)):
         if num_value == 0:
             return ", ".join(res)
 
@@ -199,7 +199,7 @@ def acemask_to_cdmi_str(num_value, is_object):
     :rtype: string
     """
     res = []
-    for idx in xrange(len(ACEMASK_TABLE)):
+    for idx in range(len(ACEMASK_TABLE)):
         if num_value == 0:
             return ", ".join(res)
 

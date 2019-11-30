@@ -1,4 +1,4 @@
-"""Copyright 2019 - 
+"""Copyright 2019 -
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,14 +21,17 @@ load_dotenv()
 # BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 # load_dotenv(dotenv_path=os.path.join(BASE_DIR, ".env"))
 
-# Envrironment variables to set:
-# DSE_HOST: space separated list of IP/Host address (default: ('127.0.0.1',))
-# MQTT_HOST: IP/Host address of the MQTT server (default: '127.0.0.1')
 
 __version__ = "1.0"
 
 
 class Config(object):
+    """Store the configuration options for radon
+    - Environment variables to set:
+        DSE_HOST: space separated list of IP/Host address (default: ('127.0.0.1',))
+        MQTT_HOST: IP/Host address of the MQTT server (default: '127.0.0.1')
+    """
+
     def __init__(self):
         # List of host address for the DSE cluster
         dse_host_var = os.environ.get("DSE_HOST")
