@@ -22,7 +22,7 @@ load_dotenv()
 # load_dotenv(dotenv_path=os.path.join(BASE_DIR, ".env"))
 
 
-__version__ = "1.0"
+__version__ = "1.0.0"
 
 
 class Config(object):
