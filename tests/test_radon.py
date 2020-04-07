@@ -51,3 +51,10 @@ class RadonTest(unittest.TestCase):
 #   - delete user
 #   - user.to_dict()
 #   - User.find()
+
+
+def test_split():
+    assert split("/collection/resource.txt") == ("/collection", "resource.txt")
+    assert split("/collection/résource.txt") == ("/collection", "résource.txt")
+    assert split("/resource") == ("/", "resource")
+    assert split("resource.txt") == ("", "resource.txt")

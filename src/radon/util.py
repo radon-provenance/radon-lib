@@ -269,5 +269,6 @@ def split(path):
     return tuple((coll_name, resc_name))
 
 
+
 def verify_password(pw1, pw2):
     return pbkdf2_sha256.verify(pw1, pw2)
