@@ -18,7 +18,7 @@ import dse.cluster
 from dse.cqlengine import connection
 from dse.cqlengine.management import (
     create_keyspace_network_topology,
-    #    drop_keyspace,
+    drop_keyspace,
     sync_table,
     create_keyspace_simple,
 )
@@ -31,7 +31,7 @@ from dse.policies import (
 
 
 from radon import cfg
-from radon.log import init_log
+from radon.log import logger
 from radon.models.group import Group
 from radon.models.user import User
 from radon.models.tree_entry import TreeEntry
@@ -44,7 +44,6 @@ from radon.models.acl import Ace
 from radon.models.notification import Notification
 
 
-logger = init_log("models")
 
 
 def initialise():
@@ -57,7 +56,7 @@ def initialise():
     repl_factor = cfg.dse_repl_factor
     hosts = cfg.dse_host
 
-    for retry in range(num_retries):
+    for _ in range(num_retries):
         try:
             logger.info(
                 'Connecting to Cassandra keyspace "{2}" '

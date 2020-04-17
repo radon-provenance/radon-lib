@@ -15,40 +15,31 @@ limitations under the License.
 
 import logging
 
+from radon import cfg
 
-class LogFormatter(logging.Formatter):
-    """Uses the ISO8601 date format, with the optional 'T' character, and a 
-    '.' as the decimal separator."""
+def init_logger(name):
+    """Initialise logging"""
+    logger = logging.getLogger(name)
+    handler = logging.StreamHandler()
 
-    default_format = "%(name)-12s %(asctime)s.%(msecs)03dZ %(levelname)-8s%(message)s"
-    debug_format = (
-        "%(name)-12s %(asctime)s.%(msecs)03dZ %(levelname)-8s"
-        "[%(pathname)s:%(funcName)s:%(lineno)s] %(message)s"
+    default_fmt = logging.Formatter(
+        "%(name)-10s %(asctime)s %(levelname)-9s%(message)s"
     )
 
-    def __init__(self, fmt="%(levelno)s: %(msg)s"):
-        logging.Formatter.__init__(self, fmt)
+    debug_fmt = logging.Formatter(
+        "%(name)-10s %(asctime)s %(levelname)-9s"
+        "[%(pathname)s:%(funcName)s:%(lineno)s] %(message)s"
+    )
+    if cfg.debug:
+        logger.setLevel(logging.DEBUG)
+        handler.setFormatter(debug_fmt)
+    else:
+        logger.setLevel(logging.WARNING)
+        handler.setFormatter(default_fmt)
 
-    def format(self, record):
-        orig_fmt = self._fmt
-        self._fmt = self.default_format
-        self.datefmt = "%Y-%m-%dT%H:%M:%S"
+    logger.addHandler(handler)
 
-        if record.levelno == logging.DEBUG:
-            self._fmt = self.debug_format
-
-        result = logging.Formatter.format(self, record)
-
-        self._fmt = orig_fmt
-
-        return result
+    return logger
 
 
-def init_log(name):
-    """Initialise logging"""
-    logging.basicConfig(level=logging.INFO)
-
-    for handler in logging.root.handlers:
-        handler.setFormatter(LogFormatter())
-
-    return logging.getLogger(name)
+logger = init_logger("radon-lib")
