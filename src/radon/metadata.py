@@ -77,7 +77,7 @@ def ensure_metadata(reload=False, fileobj=None):
         obj = json.loads(data)
         RESOURCE_METADATA = obj["resources"]
         COLLECTION_METADATA = obj["collections"]
-    except Exception as e:
+    except Exception as _:
         print("$RADON_METADATA is not set")
 
 
@@ -113,8 +113,7 @@ class MetadataValidator(object):
                 err = True
 
             choices = self.rules[k].get("choices", [])
-            if not err and choices and not v in choices:
-                if v.strip() or required:
+            if (not err and choices and not v in choices) and (v.strip() or required):
                     validation_errors.append(
                         u"{} is not a valid option for the {} field, choices are: {}".format(
                             v.strip() or '""', k, ",".join(choices)

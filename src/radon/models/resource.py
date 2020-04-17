@@ -32,15 +32,15 @@ from radon.util import (
     split,
 )
 
+PROTOCOL_CASSANDRA = "cassandra://"
+
 
 def is_reference(url):
-    return not url.startswith("cassandra://")
+    return not url.startswith(PROTOCOL_CASSANDRA)
 
 
 class Resource(object):
     """Resource Model"""
-
-    logger = logging.getLogger("database")
 
     def __init__(self, entry, obj=None):
         self.entry = entry
@@ -51,7 +51,7 @@ class Resource(object):
         self.is_reference = is_reference(self.url)
         self.uuid = self.entry.uuid
         if not self.is_reference:
-            self.obj_id = self.url.replace("cassandra://", "")
+            self.obj_id = self.url.replace(PROTOCOL_CASSANDRA, "")
             self.obj = DataObject.find(self.obj_id)
         else:
             self.obj = None
@@ -114,7 +114,7 @@ class Resource(object):
             if metadata:
                 kwargs["metadata"] = metadata_cass
         else:
-            obj_id = url.replace("cassandra://", "")
+            obj_id = url.replace(PROTOCOL_CASSANDRA, "")
             data_obj = DataObject.find(obj_id)
             if metadata:
                 data_obj.update(mimetype=mimetype, metadata=metadata_cass)

@@ -17,6 +17,7 @@ from dse.cqlengine import columns
 from dse.cqlengine.models import Model
 import json
 
+from radon.models.errors import GroupConflictError
 from radon.models.notification import Notification
 from radon.util import datetime_serializer, default_uuid
 

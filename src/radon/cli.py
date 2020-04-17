@@ -45,11 +45,27 @@ import docopt
 import radon
 from radon.models import Group, initialise, sync, User
 
+ARG_NAME = "<name>"
+ARG_USERLIST = "<userlist>"
+
+MSG_GROUP_EXIST = "Group {} already exists"
+MSG_GROUP_NOT_EXIST = "Group {} doesn't exist"
+MSG_GROUP_CREATED = "Group {} has been created"
+MSG_GROUP_DELETED = "Group {} has been deleted"
+MSG_ADD_USER = "Added {} to the group {}"
+MSG_USER_IN_GROUP = "{} {} already in the group {}"
+MSG_USER_NOT_EXIST = "User {} doesn't exist"
+MSG_USERS_NOT_EXIST = "Users {} don't exist"
+MSG_USER_CREATED = "User {} has been created"
+MSG_USER_MODIFIED = "User {} has been modified"
+MSG_USER_DELETED = "User {} has been deleted"
+MSG_PROMPT_USER = "Please enter the username: "
+MSG_PROMPT_GROUP = "Please enter the group name: "
 
 def random_password(length=10):
     """Generate a random string of fixed length """
     letters = string.ascii_letters + string.digits + string.punctuation
-    return "".join(random.choice(letters) for i in range(length))
+    return "".join(random.choice(letters) for _ in range(length))
 
 
 class RadonApplication():
@@ -61,17 +77,17 @@ class RadonApplication():
 
     def add_to_group(self, args):
         """Add user(s) to a group."""
-        groupname = args["<name>"]
-        ls_users = args["<userlist>"]
+        groupname = args[ARG_NAME]
+        ls_users = args[ARG_USERLIST]
         group = Group.find(groupname)
         if not group:
-            self.print_error("Group {} doesn't exist".format(groupname))
+            self.print_error(MSG_GROUP_NOT_EXIST.format(groupname))
             return
         added, not_added, already_there = group.add_users(ls_users)
 
         if added:
             self.print_success(
-                "Added {} to the group {}".format(", ".join(added), group.name)
+                MSG_ADD_USER.format(", ".join(added), group.name)
             )
         if already_there:
             if len(already_there) == 1:
@@ -79,15 +95,15 @@ class RadonApplication():
             else:
                 verb = "are"
             self.print_error(
-                "{} {} already in the group {}".format(
+                MSG_USER_IN_GROUP.format(
                     ", ".join(already_there), verb, group.name
                 )
             )
         if not_added:
             if len(not_added) == 1:
-                msg = "User {} doesn't exist"
+                msg = MSG_USER_NOT_EXIST
             else:
-                msg = "Users {} don't exist"
+                msg = MSG_USERS_NOT_EXIST
             self.print_error(msg.format(", ".join(not_added)))
 
     def create(self):
@@ -96,8 +112,8 @@ class RadonApplication():
 
     def list_groups(self, args):
         """List all groups or a specific group if the name is specified"""
-        if args["<name>"]:
-            name = args["<name>"]
+        if args[ARG_NAME]:
+            name = args[ARG_NAME]
             group = Group.find(name)
             if group:
                 group_info = group.to_dict()
@@ -114,15 +130,15 @@ class RadonApplication():
                 )
                 print("{0.bold}Members{0.normal}: {1}".format(self.terminal, members))
             else:
-                self.print_error("Group {} not found".format(name))
+                self.print_error(MSG_GROUP_NOT_EXIST.format(name))
         else:
             for group in Group.objects.all():
                 print(group.name)
 
     def list_users(self, args):
         """List all users or a specific user if the name is specified"""
-        if args["<name>"]:
-            name = args["<name>"]
+        if args[ARG_NAME]:
+            name = args[ARG_NAME]
             user = User.find(name)
             if user:
                 user_info = user.to_dict()
@@ -172,31 +188,31 @@ class RadonApplication():
                     )
                     print("{0.bold}Groups{0.normal}: {1}".format(self.terminal, groups))
             else:
-                self.print_error("User {} not found".format(name))
+                self.print_error(MSG_USER_NOT_EXIST.format(name))
         else:
             for user in User.objects.all():
                 print(user.name)
 
     def mk_group(self, args):
         """Create a new group. Ask in the terminal for mandatory fields"""
-        if not args["<name>"]:
+        if not args[ARG_NAME]:
             name = input("Please enter the group name: ")
         else:
-            name = args["<name>"]
+            name = args[ARG_NAME]
 
         group = Group.find(name)
         if group:
-            self.print_error("Groupname {} already exists".format(name))
+            self.print_error(MSG_GROUP_EXIST.format(name))
             return
         group = Group.create(name=name)
-        print("Group {} has been created".format(name))
+        print(MSG_GROUP_CREATED.format(group.name))
 
     def mk_ldap_user(self, args):
         """Create a new ldap user. Ask in the terminal for mandatory fields"""
-        if not args["<name>"]:
+        if not args[ARG_NAME]:
             name = input("Please enter the user's username: ")
         else:
-            name = args["<name>"]
+            name = args[ARG_NAME]
         if User.find(name):
             self.print_error("Username {} already exists".format(name))
             return
@@ -209,14 +225,14 @@ class RadonApplication():
             ldap=True,
             administrator=(admin.lower() in ["true", "y", "yes"]),
         )
-        print("User {} has been created".format(name))
+        print(MSG_USER_CREATED.format(name))
 
     def mk_user(self, args):
         """Create a new user. Ask in the terminal for mandatory fields"""
-        if not args["<name>"]:
+        if not args[ARG_NAME]:
             name = input("Please enter the user's username: ")
         else:
-            name = args["<name>"]
+            name = args[ARG_NAME]
         if User.find(name):
             self.print_error("Username {} already exists".format(name))
             return
@@ -234,11 +250,11 @@ class RadonApplication():
             ldap=False,
             administrator=(admin.lower() in ["true", "y", "yes"]),
         )
-        print("User {} has been created".format(name))
+        print(MSG_USER_CREATED.format(name))
 
     def mod_user(self, args):
         """Modify a user. Ask in the terminal if the value isn't provided"""
-        name = args["<name>"]
+        name = args[ARG_NAME]
         user = User.find(name)
         if not user:
             self.print_error("User {} doesn't exist".format(name))
@@ -261,7 +277,7 @@ class RadonApplication():
             user.update(ldap=value.lower() in ["true", "y", "yes"])
         elif args["password"]:
             user.update(password=value)
-        print("User {} has been modified".format(name))
+        print(MSG_USER_MODIFIED.format(name))
 
     def print_error(self, msg):
         """Display an error message."""
@@ -273,12 +289,12 @@ class RadonApplication():
 
     def rm_from_group(self, args):
         """Remove user(s) from a group."""
-        groupname = args["<name>"]
+        groupname = args[ARG_NAME]
         group = Group.find(groupname)
         if not group:
-            self.print_error("Group {} doesn't exist".format(groupname))
+            self.print_error(MSG_GROUP_NOT_EXIST.format(groupname))
             return
-        ls_users = args["<userlist>"]
+        ls_users = args[ARG_USERLIST]
         removed, not_there, not_exist = group.rm_users(ls_users)
         if removed:
             self.print_success(
@@ -301,35 +317,34 @@ class RadonApplication():
 
     def rm_group(self, args):
         """Remove a group."""
-        if not args["<name>"]:
-            name = input("Please enter the group name: ")
+        if not args[ARG_NAME]:
+            name = input(MSG_PROMPT_GROUP)
         else:
-            name = args["<name>"]
+            name = args[ARG_NAME]
         group = Group.find(name)
         if not group:
-            self.print_error("Group {} doesn't exist".format(name))
+            self.print_error(MSG_GROUP_NOT_EXIST.format(name))
             return
         group.delete()
-        print("Group {} has been deleted".format(name))
+        print(MSG_GROUP_DELETED.format(name))
 
     def rm_user(self, args):
         """Remove a user."""
-        if not args["<name>"]:
-            name = input("Please enter the user's username: ")
+        if not args[ARG_NAME]:
+            name = input(MSG_PROMPT_USER)
         else:
-            name = args["<name>"]
+            name = args[ARG_NAME]
         user = User.find(name)
         if not user:
-            self.print_error("User {} doesn't exist".format(name))
+            self.print_error(MSG_USER_NOT_EXIST.format(name))
             return
         user.delete()
-        print("User {} has been deleted".format(name))
+        print(MSG_USER_DELETED.format(name))
 
 
 def main():
     """Main function"""
     logging.basicConfig(level=logging.WARNING)
-    logging.getLogger("models").setLevel(logging.WARNING)
     logging.getLogger("dse.policies").setLevel(logging.WARNING)
     logging.getLogger("dse.cluster").setLevel(logging.WARNING)
     logging.getLogger("dse.cqlengine.management").setLevel(logging.WARNING)
@@ -362,7 +377,6 @@ def main():
         return app.rm_group(arguments)
     elif arguments["rmuser"]:
         return app.rm_user(arguments)
-    return
 
 
 if __name__ == "__main__":

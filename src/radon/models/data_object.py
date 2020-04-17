@@ -13,7 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from io import BytesIO
+from io import (
+    BytesIO,
+    StringIO
+)
 import zipfile
 from datetime import datetime
 from dse.cqlengine import columns, connection

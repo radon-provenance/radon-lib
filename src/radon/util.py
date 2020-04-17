@@ -60,7 +60,7 @@ def _calculate_CRC16(id_):
     return crc16
 
 
-def _get_blankID():
+def _get_blank_id():
     """Return a blank CDMI compliant ID.
 
     Return a blank CDMI compliant ID with enterprise number etc.
@@ -139,7 +139,7 @@ def decode_meta(value):
 def default_cdmi_id():
     """Return a new CDMI ID"""
     # Get a blank CDMI ID
-    id_ = _get_blankID()
+    id_ = _get_blank_id()
     # Pack after first 8 bytes of identifier in network byte order
     # (big-endian)
     uid = uuid.uuid4()

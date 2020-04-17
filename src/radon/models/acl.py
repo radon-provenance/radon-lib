@@ -324,7 +324,7 @@ def cdmi_str_to_acemask(cdmi_str, is_object):
 
 
 def serialize_acl_metadata(obj):
-    """obj = Collection or Resource"""
+    """obj: Collection or Resource"""
     # Create a dictionary of acl from object metadata (stored in Cassandra
     # lists)
     from radon.models.resource import Resource

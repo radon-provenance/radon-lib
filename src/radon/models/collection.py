@@ -36,7 +36,6 @@ from radon.models.errors import (
     NoSuchCollectionError,
 )
 
-# import logging
 
 
 class Collection(object):
