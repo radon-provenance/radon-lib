@@ -130,7 +130,6 @@ dmypy.json
 
 # SonarQube
 .scannerwork/	
-.scannerwork/report-task.txt
 run_tests_jenkins.sh
 sonar-project.properties
 sonar_scan.sh
