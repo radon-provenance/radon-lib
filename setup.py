@@ -16,6 +16,10 @@ limitations under the License.
 from setuptools import find_packages, setup
 from glob import glob
 import os
+from os.path import (
+    basename,
+    splitext
+)
 import codecs
 import re
 
@@ -35,7 +39,6 @@ def find_version(*file_paths):
 
 setup(
     name="radon",
-    #version=radon.__version__,
     version=find_version("src/radon", "__init__.py"),
     description="Radon core library",
     extras_require={},
