@@ -45,8 +45,11 @@ class Config(object):
             self.dse_host = dse_host_var.split(" ")
         else:
             self.dse_host = [DEFAULT_DSE_HOST,]
-        # Cassandra keyspace
+        # Cassandra keyspace ("SimpleStrategy" or "NetworkTopologyStrategy")
         self.dse_keyspace = DEFAULT_DSE_KEYSPACE
+        # Not used for Simple Strategy
+        # map of dc_names: replication_factor for NetworkTopologyStrategy
+        self.dse_dc_replication_map = {}
         self.dse_strategy = DEFAULT_DSE_STRATEGY
         self.dse_repl_factor = DEFAULT_DSE_REPL_FACTOR
 

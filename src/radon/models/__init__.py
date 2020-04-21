@@ -48,13 +48,14 @@ from radon.models.notification import Notification
 
 def initialise():
     """Initialise Cassandra connection"""
-    num_retries = 6
-    retry_timeout = 1
+    num_retries = 5
+    retry_timeout = 2
 
     keyspace = cfg.dse_keyspace
     strategy = (cfg.dse_strategy,)
     repl_factor = cfg.dse_repl_factor
     hosts = cfg.dse_host
+    dc_replication_map = cfg.dse_dc_replication_map
 
     for _ in range(num_retries):
         try:
@@ -62,31 +63,32 @@ def initialise():
                 'Connecting to Cassandra keyspace "{2}" '
                 'on "{0}" with strategy "{1}"'.format(hosts, strategy, keyspace)
             )
+            
             connection.setup(
                 hosts,
                 keyspace,
-                protocol_version=3,
-                load_balancing_policy=DCAwareRoundRobinPolicy(),
+                protocol_version=3
             )
 
-            if cfg.dse_strategy is "SimpleStrategy":
-                create_keyspace_simple(keyspace, repl_factor, True)
+            if cfg.dse_strategy is "NetworkTopologyStrategy":
+                create_keyspace_network_topology(keyspace, dc_replication_map, True)
             else:
-                create_keyspace_network_topology(keyspace, {}, True)
+                create_keyspace_simple(keyspace, repl_factor, True)
 
-            break
+            return True
         except dse.cluster.NoHostAvailable:
             logger.warning(
-                "Unable to connect to Cassandra. Retrying in {0} seconds...".format(
+                "Unable to connect to Cassandra on {0}. Retrying in {1} seconds...".format(
+                    hosts,
                     retry_timeout
                 )
             )
             time.sleep(retry_timeout)
-            retry_timeout *= 2
+    return False
 
 
 def sync():
-    """Create tablesfor the different models"""
+    """Create tables for the different models"""
     tables = (
         DataObject,
         Group,
