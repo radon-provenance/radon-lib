@@ -134,13 +134,6 @@ class Resource(object):
         new.index()
         return new
 
-    def create_acl_cdmi(self, cdmi_acl):
-        """Add the ACL from a cdmi acl list, ACL are replaced"""
-        if self.is_reference:
-            self.entry.create_entry_acl_cdmi(cdmi_acl)
-        else:
-            self.obj.create_acl_cdmi(cdmi_acl)
-
     def create_acl_list(self, read_access, write_access):
         """Add the ACL from lists of group ids, ACL are replaced"""
         if self.is_reference:
@@ -438,21 +431,13 @@ class Resource(object):
         # Index the resource
         resc.index()
 
-    def update_acl_cdmi(self, cdmi_acl):
-        """Update the ACL from a cdmi list of ACE"""
-        if self.is_reference:
-            self.entry.update_entry_acl_cdmi(cdmi_acl)
-        else:
-            if self.obj:
-                self.obj.update_acl_cdmi(cdmi_acl)
-
     def update_acl_list(self, read_access, write_access):
         """Update the ACL from a cdmi list of ACE"""
         if self.is_reference:
-            self.entry.update_entry_acl_cdmi(read_access, write_access)
+            self.entry.update_entry_acl_list(read_access, write_access)
         else:
             if self.obj:
-                self.obj.update_acl_cdmi(read_access, write_access)
+                self.obj.update_acl_list(read_access, write_access)
 
     def user_can(self, user, action):
         """

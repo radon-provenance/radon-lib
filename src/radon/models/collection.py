@@ -160,11 +160,6 @@ class Collection(object):
         existing ACL are replaced"""
         self.entry.create_container_acl_list(read_access, write_access)
 
-    def create_acl_cdmi(self, cdmi_acl):
-        """Create ACL in the tree entry table from ACL in the cdmi format (list
-        of ACE dictionary), existing ACL are replaced"""
-        self.entry.create_container_acl_cdmi(cdmi_acl)
-
     def delete(self, username=None):
         """Delete a collection and the associated row in the tree entry table"""
         from radon.models import Notification
@@ -346,11 +341,6 @@ class Collection(object):
         """Update ACL in the tree entry table from two lists of groups id,
         existing ACL are replaced"""
         self.entry.update_container_acl_list(read_access, write_access)
-
-    def update_acl_cdmi(self, cdmi_acl):
-        """Update ACL in the tree entry table from ACL in the cdmi format (list
-        of ACE dictionary), existing ACL are replaced"""
-        self.entry.update_container_acl_cdmi(cdmi_acl)
 
     def user_can(self, user, action):
         """

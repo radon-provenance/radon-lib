@@ -27,7 +27,6 @@ from radon import cfg
 from radon.models import Group
 from radon.models.acl import (
     Ace,
-    acl_cdmi_to_cql,
     acl_list_to_cql,
     cdmi_str_to_aceflag,
     str_to_acemask,
@@ -177,11 +176,6 @@ class DataObject(Model):
         )
         session.execute(query, (self.uuid,))
 
-    def create_acl_cdmi(self, cdmi_acl):
-        """""Create entry ACL from a cdmi object (list of dict)"""
-        cql_string = acl_cdmi_to_cql(cdmi_acl)
-        self.create_acl(cql_string)
-
     def create_acl_list(self, read_access, write_access):
         """Create ACL from two lists of groups id, existing ACL are replaced"""
         cql_string = acl_list_to_cql(read_access, write_access)
@@ -243,11 +237,6 @@ class DataObject(Model):
             )
         )
         session.execute(query, (self.uuid,))
-
-    def update_acl_cdmi(self, cdmi_acl):
-        """"Update entry ACL from a cdmi object (list of dict)"""
-        cql_string = acl_cdmi_to_cql(cdmi_acl)
-        self.update_acl(cql_string)
 
     def update_acl_list(self, read_access, write_access):
         """Update ACL from two lists of groups id, existing ACL are replaced"""

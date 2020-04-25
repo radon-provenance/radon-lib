@@ -89,13 +89,13 @@ ACEMASK_TABLE = [
 ]
 
 ACEMASK_STR_INT_OBJ = {
-    "none": 0x0,
-    "read": ACEMASK_READ_OBJECT | ACEMASK_READ_METADATA,  # 0x09
-    "write": 0x56,  # ACEMASK_WRITE_OBJECT | ACEMASK_APPEND_DATA |
+    "NONE": 0x0,
+    "READ": ACEMASK_READ_OBJECT | ACEMASK_READ_METADATA,  # 0x09
+    "WRITE": 0x56,  # ACEMASK_WRITE_OBJECT | ACEMASK_APPEND_DATA |
     # ACEMASK_WRITE_METADATA | ACEMASK_DELETE_OBJECT,
-    "read/write": 0x56 | 0x09,
-    "edit": 0x56,
-    "delete": ACEMASK_DELETE,
+    "READ/WRITE": 0x56 | 0x09,
+    "EDIT": 0x56,
+    "DELETE": ACEMASK_DELETE,
     "SYNCHRONIZE": 0x00100000,
     "WRITE_OWNER": 0x00080000,
     "WRITE_ACL": 0x00040000,
@@ -122,18 +122,18 @@ ACEMASK_INT_STR_OBJ = {
 }
 
 ACEMASK_STR_INT_COL = {
-    "none": 0x0,
-    "read": ACEMASK_LIST_CONTAINER | ACEMASK_READ_METADATA,
-    "write": 0x56,  # ACEMASK_ADD_OBJECT | ACEMASK_ADD_SUBCONTAINER |
+    "NONE": 0x0,
+    "READ": ACEMASK_LIST_CONTAINER | ACEMASK_READ_METADATA,
+    "WRITE": 0x56,  # ACEMASK_ADD_OBJECT | ACEMASK_ADD_SUBCONTAINER |
     # ACEMASK_WRITE_METADATA | ACEMASK_DELETE_SUBCONTAINER,
-    "read/write": 0x56 | 0x09,
-    "edit": 0x56,
-    "delete": (ACEMASK_DELETE | ACEMASK_DELETE_OBJECT | ACEMASK_DELETE_SUBCONTAINER),
+    "READ/WRITE": 0x56 | 0x09,
+    "EDIT": 0x56,
+    "DELETE": (ACEMASK_DELETE | ACEMASK_DELETE_OBJECT | ACEMASK_DELETE_SUBCONTAINER),
     "SYNCHRONIZE": 0x00100000,
     "WRITE_OWNER": 0x00080000,
     "WRITE_ACL": 0x00040000,
     "READ_ACL": 0x00020000,
-    "DELETE": 0x00010000,
+    "DELETE": (ACEMASK_DELETE | ACEMASK_DELETE_OBJECT | ACEMASK_DELETE_SUBCONTAINER),
     "WRITE_RETENTION_HOLD": 0x00000400,
     "WRITE_RETENTION": 0x00000200,
     "WRITE_ATTRIBUTES": 0x00000100,
@@ -175,8 +175,12 @@ def aceflag_to_cdmi_str(num_value):
     :type num_value: integer
     :rtype: string
     """
+    print (num_value)
+    if num_value == 0:
+        return "NO_FLAGS"
     res = []
     for idx in range(len(ACEFLAG_TABLE)):
+        print (num_value)
         if num_value == 0:
             return ", ".join(res)
 
@@ -194,7 +198,7 @@ def acemask_to_cdmi_str(num_value, is_object):
 
     :param num_value: ACE mask numeric value
     :type num_value: integer
-    :param is_object: True if the ACE relates to an object, False for a c
+    :param is_object: True if the ACE relates to an object, False for a collection
     :type is_object: boolean
     :rtype: string
     """
@@ -220,44 +224,9 @@ def acemask_to_str(acemask, is_object):
         return ACEMASK_INT_STR_COL.get(acemask, "")
 
 
-def acl_cdmi_to_cql(cdmi_acl):
-    ls_access = []
-    for cdmi_ace in cdmi_acl:
-        if "identifier" in cdmi_ace:
-            gid = cdmi_ace["identifier"]
-        else:
-            # Wrong syntax for the ace
-            continue
-        group = Group.find(gid)
-        if group:
-            ident = group.name
-        elif gid.upper() == "AUTHENTICATED@":
-            ident = "AUTHENTICATED@"
-        elif gid.upper() == "ANONYMOUS@":
-            ident = "ANONYMOUS@"
-        else:
-            # TODO log or return error if the identifier isn't found ?
-            continue
-        s = (
-            u"'{}': {{"
-            "acetype: '{}', "
-            "identifier: '{}', "
-            "aceflags: {}, "
-            "acemask: {}"
-            "}}"
-        ).format(
-            ident,
-            cdmi_ace["acetype"].upper(),
-            ident,
-            cdmi_str_to_aceflag(cdmi_ace["aceflags"]),
-            cdmi_str_to_acemask(cdmi_ace["acemask"], False),
-        )
-        ls_access.append(s)
-    acl = u"{{{}}}".format(", ".join(ls_access))
-    return acl
-
 
 def acl_list_to_cql(read_access, write_access):
+    print("acl_list_to_cql")
     access = {}
     for gname in read_access:
         access[gname] = "read"
@@ -294,9 +263,9 @@ def acl_list_to_cql(read_access, write_access):
 def str_to_acemask(lvl, is_object):
     """Return the acemask from a simplified access level"""
     if is_object:
-        return ACEMASK_STR_INT_OBJ.get(lvl, 0)
+        return ACEMASK_STR_INT_OBJ.get(lvl.upper(), 0)
     else:
-        return ACEMASK_STR_INT_COL.get(lvl, 0)
+        return ACEMASK_STR_INT_COL.get(lvl.upper(), 0)
 
 
 def cdmi_str_to_aceflag(cdmi_str):
@@ -328,7 +297,7 @@ def serialize_acl_metadata(obj):
     # Create a dictionary of acl from object metadata (stored in Cassandra
     # lists)
     from radon.models.resource import Resource
-
+    print("serialize_acl_metadata")
     is_object = isinstance(obj, Resource)
     acl = obj.get_acl()
     mapped_md = []
