@@ -45,17 +45,14 @@ from radon.models.notification import Notification
 
 
 
-
-def initialise():
-    """Initialise Cassandra connection"""
+def connect():
+    """Connect to a Cassandra cluster"""
     num_retries = 5
     retry_timeout = 2
 
     keyspace = cfg.dse_keyspace
-    strategy = (cfg.dse_strategy,)
-    repl_factor = cfg.dse_repl_factor
     hosts = cfg.dse_host
-    dc_replication_map = cfg.dse_dc_replication_map
+    strategy = (cfg.dse_strategy,)
 
     for _ in range(num_retries):
         try:
@@ -63,17 +60,11 @@ def initialise():
                 'Connecting to Cassandra keyspace "{2}" '
                 'on "{0}" with strategy "{1}"'.format(hosts, strategy, keyspace)
             )
-            
             connection.setup(
                 hosts,
                 keyspace,
                 protocol_version=3
             )
-
-            if cfg.dse_strategy is "NetworkTopologyStrategy":
-                create_keyspace_network_topology(keyspace, dc_replication_map, True)
-            else:
-                create_keyspace_simple(keyspace, repl_factor, True)
 
             return True
         except dse.cluster.NoHostAvailable:
@@ -86,6 +77,22 @@ def initialise():
             time.sleep(retry_timeout)
     return False
 
+def initialise():
+    """Initialise Cassandra connection"""
+    if not connect():
+        return False
+
+    strategy = (cfg.dse_strategy,)
+    repl_factor = cfg.dse_repl_factor
+    dc_replication_map = cfg.dse_dc_replication_map
+    keyspace = cfg.dse_keyspace
+
+    if cfg.dse_strategy is "NetworkTopologyStrategy":
+        create_keyspace_network_topology(keyspace, dc_replication_map, True)
+    else:
+        create_keyspace_simple(keyspace, repl_factor, True)
+
+    return True
 
 def sync():
     """Create tables for the different models"""
