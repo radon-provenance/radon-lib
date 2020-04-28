@@ -175,12 +175,10 @@ def aceflag_to_cdmi_str(num_value):
     :type num_value: integer
     :rtype: string
     """
-    print (num_value)
     if num_value == 0:
         return "NO_FLAGS"
     res = []
     for idx in range(len(ACEFLAG_TABLE)):
-        print (num_value)
         if num_value == 0:
             return ", ".join(res)
 
@@ -215,7 +213,6 @@ def acemask_to_cdmi_str(num_value, is_object):
             num_value = num_value ^ ACEMASK_TABLE[idx][0]
     return ", ".join(res)
 
-
 def acemask_to_str(acemask, is_object):
     """Return the simplified access level from an acemask"""
     if is_object:
@@ -223,10 +220,7 @@ def acemask_to_str(acemask, is_object):
     else:
         return ACEMASK_INT_STR_COL.get(acemask, "")
 
-
-
 def acl_list_to_cql(read_access, write_access):
-    print("acl_list_to_cql")
     access = {}
     for gname in read_access:
         access[gname] = "read"
@@ -244,8 +238,7 @@ def acl_list_to_cql(read_access, write_access):
             ident = "AUTHENTICATED@"
         elif gname.upper() == "ANONYMOUS@":
             ident = "ANONYMOUS@"
-        else:
-            # TODO log or return error if the identifier isn't found ?
+        else: # TODO log or return error if the identifier isn't found ?
             continue
         s = (
             u"'{}': {{"
@@ -297,7 +290,6 @@ def serialize_acl_metadata(obj):
     # Create a dictionary of acl from object metadata (stored in Cassandra
     # lists)
     from radon.models.resource import Resource
-    print("serialize_acl_metadata")
     is_object = isinstance(obj, Resource)
     acl = obj.get_acl()
     mapped_md = []
@@ -346,3 +338,5 @@ class Ace(UserType):
     # aceflags isn't used yet, future versions may use it
     aceflags = columns.Integer()
     acemask = columns.Integer()
+
+
