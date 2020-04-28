@@ -24,6 +24,7 @@ from radon.models import (
 
 from radon.models.errors import GroupConflictError
 from radon.models.group import Group
+from radon.models.collection import Collection
 
 TEST_KEYSPACE = "radon_pytest"
 
@@ -46,11 +47,25 @@ def create_groups():
             print ("group '%s' created (uuid='%s')" % (grp.name, grp.uuid))
         except GroupConflictError:
             print ("group '%s' already exists" % (group_name))
-    
 
+def create_collections():
+    Collection.create_root()
+    Collection.create("coll1", "/")
+    Collection.create("coll11", "/coll1")
+    Collection.create("coll12", "/coll1")
+    Collection.create("coll13", "/coll1")
+    Collection.create("coll2", "/")
+    Collection.create("coll21", "/coll2")
+    Collection.create("coll22", "/coll2")
+    Collection.create("coll23", "/coll2")
+    Collection.create("coll3", "/")
+    Collection.create("coll31", "/coll3")
+    Collection.create("coll32", "/coll3")
+    Collection.create("coll33", "/coll3")
 
     
 if __name__ == "__main__":
     create_keyspace()
     create_groups()
+    create_collections()
     
