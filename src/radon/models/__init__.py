@@ -86,6 +86,12 @@ def initialise():
     repl_factor = cfg.dse_repl_factor
     dc_replication_map = cfg.dse_dc_replication_map
     keyspace = cfg.dse_keyspace
+    
+    cluster = connection.get_cluster()
+    if keyspace in cluster.metadata.keyspaces:
+        # If the keyspace already exists we do not create it. Should we raise
+        # an error
+        return True
 
     if cfg.dse_strategy is "NetworkTopologyStrategy":
         create_keyspace_network_topology(keyspace, dc_replication_map, True)
