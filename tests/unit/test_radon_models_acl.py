@@ -242,8 +242,3 @@ def test_serialize_acl_metadata():
     assert acl['cdmi_acl'][0]['acemask'] == 'READ_METADATA, LIST_CONTAINER'
 
 
-
-if __name__ == "__main__":
-    test_serialize_acl_metadata()
-
-
