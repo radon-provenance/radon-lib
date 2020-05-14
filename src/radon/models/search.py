@@ -180,5 +180,5 @@ class SearchIndex(Model):
             result_count += 1
         return result_count
 
-    def __unicode__(self):
+    def __str__(self):
         return "".format(self.term, self.object_type)
