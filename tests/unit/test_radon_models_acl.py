@@ -105,7 +105,7 @@ def test_acemask_to_str():
 
 
 def test_acl_list_to_cql():
-    cfg.dse_keyspace = TEST_KEYSPACE = "radon_pytest"
+    cfg.dse_keyspace = TEST_KEYSPACE
     connect()
     
     # read
@@ -231,7 +231,7 @@ def test_cdmi_str_to_acemask():
 
 
 def test_serialize_acl_metadata():
-    cfg.dse_keyspace = TEST_KEYSPACE = "radon_pytest"
+    cfg.dse_keyspace = TEST_KEYSPACE
     connect()
 
     coll = Collection.find("/")

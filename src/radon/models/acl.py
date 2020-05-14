@@ -338,5 +338,13 @@ class Ace(UserType):
     # aceflags isn't used yet, future versions may use it
     aceflags = columns.Integer()
     acemask = columns.Integer()
+    
+    
+    def __str__(self):
+        return "(acetype: {}, identifier: {}, aceflags: {}, acemask: {})".format(
+            self.acetype,
+            self.identifier,
+            self.aceflags,
+            self.acemask)
 
 
