@@ -178,7 +178,7 @@ class Notification(Model):
             processed=True,
             payload=payload,
         )
-        cls.mqtt_publish(new, OP_CREATE, OBJ_COLLECTION, path, payload)
+        new.mqtt_publish()
         return new
 
     @classmethod
@@ -192,7 +192,7 @@ class Notification(Model):
             processed=True,
             payload=payload,
         )
-        cls.mqtt_publish(new, OP_CREATE, OBJ_GROUP, uuid, payload)
+        new.mqtt_publish()
         return new
 
     @classmethod
@@ -206,7 +206,7 @@ class Notification(Model):
             processed=True,
             payload=payload,
         )
-        cls.mqtt_publish(new, OP_CREATE, OBJ_RESOURCE, path, payload)
+        new.mqtt_publish()
         return new
 
     @classmethod
@@ -220,7 +220,7 @@ class Notification(Model):
             processed=True,
             payload=payload,
         )
-        cls.mqtt_publish(new, OP_CREATE, OBJ_USER, uuid, payload)
+        new.mqtt_publish()
         return new
 
     @classmethod
@@ -234,7 +234,7 @@ class Notification(Model):
             processed=True,
             payload=payload,
         )
-        cls.mqtt_publish(new, OP_DELETE, OBJ_COLLECTION, path, payload)
+        new.mqtt_publish()
         return new
 
     @classmethod
@@ -248,7 +248,7 @@ class Notification(Model):
             processed=True,
             payload=payload,
         )
-        cls.mqtt_publish(new, OP_DELETE, OBJ_GROUP, uuid, payload)
+        new.mqtt_publish()
         return new
 
     @classmethod
@@ -262,7 +262,7 @@ class Notification(Model):
             processed=True,
             payload=payload,
         )
-        cls.mqtt_publish(new, OP_DELETE, OBJ_RESOURCE, path, payload)
+        new.mqtt_publish()
         return new
 
     @classmethod
@@ -276,12 +276,15 @@ class Notification(Model):
             processed=True,
             payload=payload,
         )
-        cls.mqtt_publish(new, OP_DELETE, OBJ_USER, uuid, payload)
+        new.mqtt_publish()
         return new
 
-    @classmethod
-    def mqtt_publish(cls, notification, operation, object_type, object_uuid, payload):
-        topic = u"{0}/{1}/{2}".format(operation, object_type, object_uuid)
+
+    def mqtt_publish(self):
+        topic = u"{0}/{1}/{2}".format(
+            self.operation, 
+            self.object_type, 
+            self.object_uuid)
         # Clean up the topic by removing superfluous slashes.
         topic = "/".join(filter(None, topic.split("/")))
         # Remove MQTT wildcards from the topic. Corner-case: If the collection name is made entirely of # and + and a
@@ -289,9 +292,9 @@ class Notification(Model):
         topic = topic.replace("#", "").replace("+", "")
         logging.info(u'Publishing on topic "{0}"'.format(topic))
         try:
-            publish.single(topic, payload, hostname=cfg.mqtt_host)
+            publish.single(topic, self.payload, hostname=cfg.mqtt_host)
         except:
-            notification.update(processed=False)
+            self.update(processed=False)
             logging.error(u'Problem while publishing on topic "{0}"'.format(topic))
 
     @classmethod
@@ -354,7 +357,7 @@ class Notification(Model):
             processed=True,
             payload=payload,
         )
-        cls.mqtt_publish(new, OP_UPDATE, OBJ_COLLECTION, path, payload)
+        new.mqtt_publish()
         return new
 
     @classmethod
@@ -368,7 +371,7 @@ class Notification(Model):
             processed=True,
             payload=payload,
         )
-        cls.mqtt_publish(new, OP_UPDATE, OBJ_GROUP, uuid, payload)
+        new.mqtt_publish()
         return new
 
     @classmethod
@@ -382,7 +385,7 @@ class Notification(Model):
             processed=True,
             payload=payload,
         )
-        cls.mqtt_publish(new, OP_UPDATE, OBJ_RESOURCE, path, payload)
+        new.mqtt_publish()
         return new
 
     @classmethod
@@ -396,5 +399,5 @@ class Notification(Model):
             processed=True,
             payload=payload,
         )
-        cls.mqtt_publish(new, OP_UPDATE, OBJ_USER, uuid, payload)
+        new.mqtt_publish()
         return new
