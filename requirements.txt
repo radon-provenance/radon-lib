@@ -8,7 +8,7 @@ python-dotenv
 
 pytest
 pytest-cov
-
+faker
 
 
 #dse-graph==1.0.0
