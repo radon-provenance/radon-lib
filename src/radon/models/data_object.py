@@ -96,7 +96,7 @@ class DataObject(Model):
     def append_chunk(cls, uuid, raw_data, sequence_number, compressed=False):
         """Create a new blob for an existing data_object"""
         if compressed:
-            f = StringIO()
+            f = BytesIO()
             z = zipfile.ZipFile(f, "w", zipfile.ZIP_DEFLATED)
             z.writestr("data", raw_data)
             z.close()
@@ -119,7 +119,7 @@ class DataObject(Model):
         entries = DataObject.objects.filter(uuid=self.uuid)
         for entry in entries:
             if entry.compressed:
-                data = StringIO(entry.blob)
+                data = BytesIO(entry.blob)
                 z = zipfile.ZipFile(data, "r")
                 content = z.read("data")
                 data.close()
@@ -151,6 +151,7 @@ class DataObject(Model):
             "blob": data,
             "compressed": compressed,
             "modified_ts": now,
+            "size": len(data)
         }
         if metadata:
             kwargs["metadata"] = metadata
