@@ -152,7 +152,7 @@ class Collection(object):
         """Return the root collection, Create it if it doesn't exist"""
         root = Collection.find("/")
         if not root:
-            Collection.create_root()
+            root = Collection.create_root()
         return root
 
     def create_acl_list(self, read_access, write_access):
@@ -214,6 +214,8 @@ class Collection(object):
         # Check permission on the parent container if there's no action
         # defined at this level
         if not self.entry.container_acl:
+            # By default root collection should have read access for all 
+            # authenticated users
             if self.is_root:
                 return set([])
             else:
