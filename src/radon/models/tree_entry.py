@@ -110,7 +110,7 @@ class TreeEntry(Model):
                 acl_cql
             )
         )
-        session.execute(query, (self.container,))
+        res = session.execute(query, (self.container,))
 
     def create_container_acl_list(self, read_access, write_access):
         """""Create static ACL from  lists of group uuids"""
