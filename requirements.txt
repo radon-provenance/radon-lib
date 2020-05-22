@@ -9,7 +9,7 @@ python-dotenv
 pytest
 pytest-cov
 faker
-
+cli-test-helpers
 
 #dse-graph==1.0.0
 #docker
