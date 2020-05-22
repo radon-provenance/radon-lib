@@ -348,11 +348,10 @@ def main():
     logging.getLogger("dse.policies").setLevel(logging.WARNING)
     logging.getLogger("dse.cluster").setLevel(logging.WARNING)
     logging.getLogger("dse.cqlengine.management").setLevel(logging.WARNING)
-
+    import sys
     arguments = docopt.docopt(
         __doc_opt__, version="Radon Admin CLI {}".format(radon.__version__)
     )
-
     app = RadonApplication()
 
     if arguments["atg"]:
