@@ -18,7 +18,7 @@ import dse.cluster
 from dse.cqlengine import connection
 from dse.cqlengine.management import (
     create_keyspace_network_topology,
-    #    drop_keyspace,
+    drop_keyspace,
     sync_table,
     create_keyspace_simple,
 )
@@ -31,7 +31,7 @@ from dse.policies import (
 
 
 from radon import cfg
-from radon.log import init_log
+from radon.log import logger
 from radon.models.group import Group
 from radon.models.user import User
 from radon.models.tree_entry import TreeEntry
@@ -44,20 +44,17 @@ from radon.models.acl import Ace
 from radon.models.notification import Notification
 
 
-logger = init_log("models")
 
-
-def initialise():
-    """Initialise Cassandra connection"""
-    num_retries = 6
-    retry_timeout = 1
+def connect():
+    """Connect to a Cassandra cluster"""
+    num_retries = 5
+    retry_timeout = 2
 
     keyspace = cfg.dse_keyspace
-    strategy = (cfg.dse_strategy,)
-    repl_factor = cfg.dse_repl_factor
     hosts = cfg.dse_host
+    strategy = (cfg.dse_strategy,)
 
-    for retry in range(num_retries):
+    for _ in range(num_retries):
         try:
             logger.info(
                 'Connecting to Cassandra keyspace "{2}" '
@@ -66,28 +63,45 @@ def initialise():
             connection.setup(
                 hosts,
                 keyspace,
-                protocol_version=3,
-                load_balancing_policy=DCAwareRoundRobinPolicy(),
+                protocol_version=3
             )
 
-            if cfg.dse_strategy is "SimpleStrategy":
-                create_keyspace_simple(keyspace, repl_factor, True)
-            else:
-                create_keyspace_network_topology(keyspace, {}, True)
-
-            break
+            return True
         except dse.cluster.NoHostAvailable:
             logger.warning(
-                "Unable to connect to Cassandra. Retrying in {0} seconds...".format(
+                "Unable to connect to Cassandra on {0}. Retrying in {1} seconds...".format(
+                    hosts,
                     retry_timeout
                 )
             )
             time.sleep(retry_timeout)
-            retry_timeout *= 2
+    return False
 
+def initialise():
+    """Initialise Cassandra connection"""
+    if not connect():
+        return False
+
+    strategy = (cfg.dse_strategy,)
+    repl_factor = cfg.dse_repl_factor
+    dc_replication_map = cfg.dse_dc_replication_map
+    keyspace = cfg.dse_keyspace
+    
+    cluster = connection.get_cluster()
+    if keyspace in cluster.metadata.keyspaces:
+        # If the keyspace already exists we do not create it. Should we raise
+        # an error
+        return True
+
+    if cfg.dse_strategy is "NetworkTopologyStrategy":
+        create_keyspace_network_topology(keyspace, dc_replication_map, True)
+    else:
+        create_keyspace_simple(keyspace, repl_factor, True)
+
+    return True
 
 def sync():
-    """Create tablesfor the different models"""
+    """Create tables for the different models"""
     tables = (
         DataObject,
         Group,

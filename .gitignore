@@ -127,3 +127,15 @@ venv.bak/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Pytest
+tests/html/
+prof/
+
+# SonarQube	
+.scannerwork/
+run_tests_jenkins.sh
+sonar-project.properties
+sonar_scan.sh
+
+

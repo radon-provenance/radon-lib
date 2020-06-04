@@ -36,15 +36,6 @@ def _calculate_CRC16(id_):
     integer value.
 
     ``id_`` should be a bytearray object, or a bytestring (Python 2 str).
-
-    Some doctests:
-
-    >>> self._calculate_CRC16(bytearray([0, 1, 2, 3, 0, 9, 0, 0, 255]))
-    41953
-
-    >>> self._calculate_CRC16(bytearray([0, 1, 2, 3, 0, 9, 0, 0, 255]))
-    58273
-
     """
     # Coerce to bytearray. If already a bytearray this will create a copy
     # so as to avoid side-effects of manipulation for CRC calculation
@@ -60,7 +51,7 @@ def _calculate_CRC16(id_):
     return crc16
 
 
-def _get_blankID():
+def _get_blank_id():
     """Return a blank CDMI compliant ID.
 
     Return a blank CDMI compliant ID with enterprise number etc.
@@ -128,7 +119,7 @@ def decode_meta(value):
     :param value:
     """
     try:
-        # Values are stored as json strings {'json': val}
+        # Values are stored as json strings {"json": val}
         val_json = json.loads(value)
         val = val_json.get("json", "")
     except ValueError:
@@ -139,7 +130,7 @@ def decode_meta(value):
 def default_cdmi_id():
     """Return a new CDMI ID"""
     # Get a blank CDMI ID
-    id_ = _get_blankID()
+    id_ = _get_blank_id()
     # Pack after first 8 bytes of identifier in network byte order
     # (big-endian)
     uid = uuid.uuid4()
@@ -189,8 +180,8 @@ def merge(coll_name, resc_name):
     :param resc_name: basestring
     :return:
     """
-    if coll_name == "/":
-        # For root we don't add the extra '/'
+    if coll_name.endswith("/"):
+        # We don't add an extra '/' if it's already there
         return u"{}{}".format(coll_name, resc_name)
     else:
         return u"{}/{}".format(coll_name, resc_name)
@@ -271,3 +262,5 @@ def split(path):
 
 def verify_password(pw1, pw2):
     return pbkdf2_sha256.verify(pw1, pw2)
+
+

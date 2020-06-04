@@ -13,7 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from io import BytesIO
+from io import (
+    BytesIO,
+    StringIO
+)
 import zipfile
 from datetime import datetime
 from dse.cqlengine import columns, connection
@@ -24,7 +27,6 @@ from radon import cfg
 from radon.models import Group
 from radon.models.acl import (
     Ace,
-    acl_cdmi_to_cql,
     acl_list_to_cql,
     cdmi_str_to_aceflag,
     str_to_acemask,
@@ -94,7 +96,7 @@ class DataObject(Model):
     def append_chunk(cls, uuid, raw_data, sequence_number, compressed=False):
         """Create a new blob for an existing data_object"""
         if compressed:
-            f = StringIO()
+            f = BytesIO()
             z = zipfile.ZipFile(f, "w", zipfile.ZIP_DEFLATED)
             z.writestr("data", raw_data)
             z.close()
@@ -117,7 +119,7 @@ class DataObject(Model):
         entries = DataObject.objects.filter(uuid=self.uuid)
         for entry in entries:
             if entry.compressed:
-                data = StringIO(entry.blob)
+                data = BytesIO(entry.blob)
                 z = zipfile.ZipFile(data, "r")
                 content = z.read("data")
                 data.close()
@@ -149,6 +151,7 @@ class DataObject(Model):
             "blob": data,
             "compressed": compressed,
             "modified_ts": now,
+            "size": len(data)
         }
         if metadata:
             kwargs["metadata"] = metadata
@@ -173,11 +176,6 @@ class DataObject(Model):
             )
         )
         session.execute(query, (self.uuid,))
-
-    def create_acl_cdmi(self, cdmi_acl):
-        """""Create entry ACL from a cdmi object (list of dict)"""
-        cql_string = acl_cdmi_to_cql(cdmi_acl)
-        self.create_acl(cql_string)
 
     def create_acl_list(self, read_access, write_access):
         """Create ACL from two lists of groups id, existing ACL are replaced"""
@@ -240,11 +238,6 @@ class DataObject(Model):
             )
         )
         session.execute(query, (self.uuid,))
-
-    def update_acl_cdmi(self, cdmi_acl):
-        """"Update entry ACL from a cdmi object (list of dict)"""
-        cql_string = acl_cdmi_to_cql(cdmi_acl)
-        self.update_acl(cql_string)
 
     def update_acl_list(self, read_access, write_access):
         """Update ACL from two lists of groups id, existing ACL are replaced"""

@@ -20,24 +20,6 @@ class BaseError(Exception):
     pass
 
 
-class NoReadAccessError(BaseError):
-    """ACL Exception for read access."""
-
-    pass
-
-
-class NoWriteAccessError(BaseError):
-    """ACL Exception for write access."""
-
-    pass
-
-
-class NoSuchDriverError(BaseError):
-    """"""
-
-    pass
-
-
 class ModelError(BaseError):
     """Base Class for storage Exceptions
 
@@ -83,13 +65,6 @@ class GroupConflictError(ModelError):
         return "Group '{}' already exists".format(self.obj_str)
 
 
-class NodeConflictError(ModelError):
-    """Node address already used"""
-
-    def __str__(self):
-        return "Address '{}' already in use".format(self.obj_str)
-
-
 class UserConflictError(ModelError):
     """USername already used"""
 
@@ -97,26 +72,3 @@ class UserConflictError(ModelError):
         return "Username '{}' already in use".format(self.obj_str)
 
 
-class UndiagnosedModelError(ModelError):
-    """Undiagnosed Exception wrapper
-
-    A catchall Exception raised due to a situation that has not yet been
-    diagnosed and dealt with specifically. This wraps the Exception raised
-    from the underlying storage implementation.
-    """
-
-    def __init__(self, path, exc):
-        self.path = path
-        # The Exception raised by the underlying storage implementation
-        self.exc = exc
-
-    def __str__(self):
-        return "Operation on {0} caused an exception:\n{1}" "".format(
-            self.path, self.exc
-        )
-
-
-class UniqueError(BaseError):
-    """Uniqueness error"""
-
-    pass

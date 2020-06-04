@@ -16,13 +16,19 @@ limitations under the License.
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from a .env file (root dir of the package)
+# Load environment variables
 load_dotenv()
-# BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-# load_dotenv(dotenv_path=os.path.join(BASE_DIR, ".env"))
 
+__version__ = "1.0.1"
 
-__version__ = "1.0.0"
+ENV_DSE_HOST_VAR = "DSE_HOST"
+ENV_MQTT_HOST_VAR = "MQTT_HOST"
+
+DEFAULT_DSE_HOST = "127.0.0.1"
+DEFAULT_DSE_KEYSPACE = "radon"
+DEFAULT_DSE_STRATEGY = "SimpleStrategy"
+DEFAULT_DSE_REPL_FACTOR = 1
+DEFAULT_MQTT_HOST = "127.0.0.1"
 
 
 class Config(object):
@@ -34,18 +40,24 @@ class Config(object):
 
     def __init__(self):
         # List of host address for the DSE cluster
-        dse_host_var = os.environ.get("DSE_HOST")
+        dse_host_var = os.environ.get(ENV_DSE_HOST_VAR)
         if dse_host_var:
             self.dse_host = dse_host_var.split(" ")
         else:
-            self.dse_host = ("127.0.0.1",)
-        # Cassandra keyspace
-        self.dse_keyspace = "radon"
-        self.dse_strategy = "SimpleStrategy"
-        self.dse_repl_factor = 1
+            self.dse_host = [DEFAULT_DSE_HOST,]
+        # Cassandra keyspace ("SimpleStrategy" or "NetworkTopologyStrategy")
+        self.dse_keyspace = DEFAULT_DSE_KEYSPACE
+        # Not used for Simple Strategy
+        # map of dc_names: replication_factor for NetworkTopologyStrategy
+        self.dse_dc_replication_map = {}
+        self.dse_strategy = DEFAULT_DSE_STRATEGY
+        self.dse_repl_factor = DEFAULT_DSE_REPL_FACTOR
 
         # IP address of the MQTT server
-        self.mqtt_host = os.environ.get("MQTT_HOST", "127.0.0.1")
+        self.mqtt_host = os.environ.get(ENV_MQTT_HOST_VAR, DEFAULT_MQTT_HOST)
+        
+        # Debug mode
+        self.debug = False
 
 
 cfg = Config()

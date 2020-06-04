@@ -32,15 +32,15 @@ from radon.util import (
     split,
 )
 
+PROTOCOL_CASSANDRA = "cassandra://"
+
 
 def is_reference(url):
-    return not url.startswith("cassandra://")
+    return not url.startswith(PROTOCOL_CASSANDRA)
 
 
 class Resource(object):
     """Resource Model"""
-
-    logger = logging.getLogger("database")
 
     def __init__(self, entry, obj=None):
         self.entry = entry
@@ -51,12 +51,12 @@ class Resource(object):
         self.is_reference = is_reference(self.url)
         self.uuid = self.entry.uuid
         if not self.is_reference:
-            self.obj_id = self.url.replace("cassandra://", "")
+            self.obj_id = self.url.replace(PROTOCOL_CASSANDRA, "")
             self.obj = DataObject.find(self.obj_id)
         else:
             self.obj = None
 
-    def __unicode__(self):
+    def __str__(self):
         return self.path
 
     def chunk_content(self):
@@ -77,6 +77,7 @@ class Resource(object):
         mimetype=None,
         username=None,
         size=None,
+        checksum=None
     ):
         """Create a new resource in the tree_entry table"""
         from radon.models import Collection
@@ -93,10 +94,6 @@ class Resource(object):
         path = merge(container, name)
         if metadata:
             metadata_cass = meta_cdmi_to_cassandra(metadata)
-        # Check the container exists
-        collection = Collection.find(container)
-        if not collection:
-            raise NoSuchCollectionError(container)
         # Make sure parent/name are not in use.
         existing = cls.find(path)
         if existing:
@@ -114,8 +111,10 @@ class Resource(object):
             if metadata:
                 kwargs["metadata"] = metadata_cass
         else:
-            obj_id = url.replace("cassandra://", "")
+            obj_id = url.replace(PROTOCOL_CASSANDRA, "")
             data_obj = DataObject.find(obj_id)
+            if checksum:
+                data_obj.update(checksum=checksum)
             if metadata:
                 data_obj.update(mimetype=mimetype, metadata=metadata_cass)
             else:
@@ -134,19 +133,13 @@ class Resource(object):
         new.index()
         return new
 
-    def create_acl_cdmi(self, cdmi_acl):
-        """Add the ACL from a cdmi acl list, ACL are replaced"""
-        if self.is_reference:
-            self.entry.create_entry_acl_cdmi(cdmi_acl)
-        else:
-            self.obj.create_acl_cdmi(cdmi_acl)
-
     def create_acl_list(self, read_access, write_access):
         """Add the ACL from lists of group ids, ACL are replaced"""
         if self.is_reference:
             self.entry.create_entry_acl_list(read_access, write_access)
         else:
-            self.obj.create_acl_list(read_access, write_access)
+            if self.obj:
+                self.obj.create_acl_list(read_access, write_access)
 
     def delete(self, username=None):
         """Delete the resource in the tree_entry table and all the corresponding
@@ -378,10 +371,26 @@ class Resource(object):
                 pass
         return read_access, write_access
 
+
     def reset(self):
         from radon.models import SearchIndex
 
         SearchIndex.reset(self.path)
+
+
+    def set_checksum(self, checksum):
+        """Set the checksum for the data object. For a reference the checksum 
+        is not stored in Cassandra. We may change the model and store is in
+        Tree Entry"""
+        if self.is_reference:
+            return
+        else:
+            if not self.obj:
+                self.obj = DataObject.find(self.obj_id)
+                if self.obj is None:
+                    return
+            self.obj.update(checksum=checksum)
+
 
     def simple_dict(self, user=None):
         """Return a dictionary which describes a resource for the web ui"""
@@ -428,7 +437,8 @@ class Resource(object):
             if "url" in kwargs:
                 self.entry.update(url=kwargs["url"])
                 del kwargs["url"]
-            self.obj.update(**kwargs)
+            if self.obj:
+                self.obj.update(**kwargs)
 
         resc = Resource.find(self.path)
         post_state = resc.mqtt_get_state()
@@ -438,21 +448,13 @@ class Resource(object):
         # Index the resource
         resc.index()
 
-    def update_acl_cdmi(self, cdmi_acl):
-        """Update the ACL from a cdmi list of ACE"""
-        if self.is_reference:
-            self.entry.update_entry_acl_cdmi(cdmi_acl)
-        else:
-            if self.obj:
-                self.obj.update_acl_cdmi(cdmi_acl)
-
     def update_acl_list(self, read_access, write_access):
         """Update the ACL from a cdmi list of ACE"""
         if self.is_reference:
-            self.entry.update_entry_acl_cdmi(read_access, write_access)
+            self.entry.update_entry_acl_list(read_access, write_access)
         else:
             if self.obj:
-                self.obj.update_acl_cdmi(read_access, write_access)
+                self.obj.update_acl_list(read_access, write_access)
 
     def user_can(self, user, action):
         """

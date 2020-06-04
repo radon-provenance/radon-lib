@@ -56,7 +56,7 @@ class SearchIndex(Model):
                 result_obj = result_obj.to_dict(user)
                 result_obj["result_type"] = "Collection"
                 return result_obj
-            elif obj.object_type == "Resource":
+            if obj.object_type == "Resource":
                 result_obj = Resource.find(obj.object_path)
                 # Check the resource's collection for read permission
                 if not result_obj or not result_obj.user_can(user, "read"):
@@ -180,5 +180,5 @@ class SearchIndex(Model):
             result_count += 1
         return result_count
 
-    def __unicode__(self):
+    def __str__(self):
         return "".format(self.term, self.object_type)

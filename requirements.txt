@@ -6,7 +6,10 @@ passlib==1.6.2
 paho-mqtt==1.4
 python-dotenv
 
-
+pytest
+pytest-cov
+faker
+cli-test-helpers
 
 #dse-graph==1.0.0
 #docker

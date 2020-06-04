@@ -1,4 +1,4 @@
-"""Copyright 2019 - 
+"""Copyright 2020 - 
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,11 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import unittest
+from radon.models.resource import(
+    is_reference
+)
 
-from radon.cli import RadonApplication
 
 
-class CLITest(unittest.TestCase):
-    def test_1(self):
-        assert (5) == 5
+def test_is_reference():
+    assert is_reference("cassandra://0000A4EF001849A5BB37DC79AB07483296F36FC34141950D") == False
+    assert is_reference("http://radon.radon.org/Test") == True
