@@ -19,6 +19,4 @@ RUN mkdir -p /code/radon-lib
 COPY radon-lib /code/radon-lib
 WORKDIR /code/radon-lib
 RUN pip install -r requirements.txt
-# Patch dse
-RUN patch /usr/local/lib/python3.6/site-packages/dse/cqlengine/connection.py < patch/patch_dse.patch 
 RUN python setup.py develop
