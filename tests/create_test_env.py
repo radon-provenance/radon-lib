@@ -73,9 +73,9 @@ def create_users():
             print ("user '%s' already exists" % (user_name))
 
 
-def create_collection(parent, collection):
+def create_collection(collection, parent):
     try:
-        Collection.create(parent, collection)
+        Collection.create(collection, parent)
     except: # Collection already exists quite likely
         print("collection {}/{} already exists".format(parent, collection))
 
@@ -89,18 +89,18 @@ def create_root():
 
 def create_collections():
     create_root()
-    create_collection("/", "coll1")
-    create_collection("/coll1","coll11")
-    create_collection("/coll1","coll12")
-    create_collection("/coll1","coll13")
-    create_collection("/", "coll2")
-    create_collection("/coll2","coll21")
-    create_collection("/coll2","coll22")
-    create_collection("/coll2","coll23")
-    create_collection("/", "coll3")
-    create_collection("/coll3","coll31")
-    create_collection("/coll3","coll32")
-    create_collection("/coll3","coll33")
+    create_collection("coll1", "/")
+    create_collection("coll11", "/coll1")
+    create_collection("coll12", "/coll1")
+    create_collection("coll13", "/coll1")
+    create_collection("coll2", "/")
+    create_collection("coll21", "/coll2")
+    create_collection("coll22", "/coll2")
+    create_collection("coll23", "/coll2")
+    create_collection("coll3", "/")
+    create_collection("coll31", "/coll3")
+    create_collection("coll32", "/coll3")
+    create_collection("coll33", "/coll3")
 
 
 def create_resource(container, name, data):
