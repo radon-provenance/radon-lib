@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 ENV_DSE_HOST_VAR = "DSE_HOST"
 ENV_MQTT_HOST_VAR = "MQTT_HOST"
