@@ -220,6 +220,43 @@ def acemask_to_str(acemask, is_object):
     else:
         return ACEMASK_INT_STR_COL.get(acemask, "")
 
+def acl_cdmi_to_cql(cdmi_acl):
+    ls_access = []
+    for cdmi_ace in cdmi_acl:
+        if "identifier" in cdmi_ace:
+            gid = cdmi_ace["identifier"]
+        else:
+            # Wrong syntax for the ace
+            continue
+        group = Group.find(gid)
+        if group:
+            ident = group.name
+        elif gid.upper() == "AUTHENTICATED@":
+            ident = "AUTHENTICATED@"
+        elif gid.upper() == "ANONYMOUS@":
+            ident = "ANONYMOUS@"
+        else:
+            # TODO log or return error if the identifier isn't found ?
+            continue
+        s = (
+            u"'{}': {{"
+            "acetype: '{}', "
+            "identifier: '{}', "
+            "aceflags: {}, "
+            "acemask: {}"
+            "}}"
+        ).format(
+            ident,
+            cdmi_ace["acetype"].upper(),
+            ident,
+            cdmi_str_to_aceflag(cdmi_ace["aceflags"]),
+            cdmi_str_to_acemask(cdmi_ace["acemask"], False),
+        )
+        ls_access.append(s)
+    acl = u"{{{}}}".format(", ".join(ls_access))
+    return acl
+
+
 def acl_list_to_cql(read_access, write_access):
     access = {}
     for gname in read_access:

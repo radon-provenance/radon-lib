@@ -19,7 +19,11 @@ import json
 
 
 from radon.models import DataObject, TreeEntry, User
-from radon.models.acl import acemask_to_str, serialize_acl_metadata
+from radon.models.acl import (
+    acemask_to_str,
+    acl_cdmi_to_cql,
+    serialize_acl_metadata
+)
 from radon.models.errors import NoSuchCollectionError, ResourceConflictError
 from radon.util import (
     datetime_serializer,
@@ -447,6 +451,16 @@ class Resource(object):
 
         # Index the resource
         resc.index()
+
+    def update_acl_cdmi(self, cdmi_acl):
+        """Update ACL in the tree entry table from ACL in the cdmi format (list
+        of ACE dictionary), existing ACL are replaced"""
+        cql_string = acl_cdmi_to_cql(cdmi_acl)
+        if self.is_reference:
+            self.entry.update_entry_acl(cql_string)
+        else:
+            if self.obj:
+                self.obj.update_acl(cql_string)
 
     def update_acl_list(self, read_access, write_access):
         """Update the ACL from a cdmi list of ACE"""

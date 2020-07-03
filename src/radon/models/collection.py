@@ -20,7 +20,11 @@ import json
 
 from radon import cfg
 from radon.models import TreeEntry, User
-from radon.models.acl import acemask_to_str, serialize_acl_metadata
+from radon.models.acl import (
+    acemask_to_str,
+    acl_cdmi_to_cql,
+    serialize_acl_metadata
+)
 from radon.util import (
     datetime_serializer,
     decode_meta,
@@ -159,6 +163,11 @@ class Collection(object):
         """Create ACL in the tree entry table from two lists of groups id,
         existing ACL are replaced"""
         self.entry.create_container_acl_list(read_access, write_access)
+
+    def create_acl_cdmi(self, cdmi_acl):
+        """Create ACL in the tree entry table from ACL in the cdmi format (list
+        of ACE dictionary), existing ACL are replaced"""
+        self.entry.create_container_acl_cdmi(cdmi_acl)
 
     def delete(self, username=None):
         """Delete a collection and the associated row in the tree entry table"""
@@ -338,6 +347,12 @@ class Collection(object):
         payload = coll.mqtt_payload(pre_state, post_state)
         Notification.update_collection(username, coll.path, payload)
         coll.index()
+
+    def update_acl_cdmi(self, cdmi_acl):
+        """Update ACL in the tree entry table from ACL in the cdmi format (list
+        of ACE dictionary), existing ACL are replaced"""
+        cql_string = acl_cdmi_to_cql(cdmi_acl)
+        self.entry.update_entry_acl(cql_string)
 
     def update_acl_list(self, read_access, write_access):
         """Update ACL in the tree entry table from two lists of groups id,
