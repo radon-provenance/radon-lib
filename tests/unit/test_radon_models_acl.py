@@ -123,7 +123,16 @@ def test_acl_list_to_cql():
     assert acl == "{'ANONYMOUS@': {acetype: 'ALLOW', identifier: 'ANONYMOUS@', aceflags: 0, acemask: 86}}"
     acl = acl_list_to_cql(["UnknownUser"], [])
     assert acl == "{}"
+
+
+def test_acl_cdmi_to_cql():
+    cfg.dse_keyspace = TEST_KEYSPACE
+    connect()
     
+    acl = acl_cdmi_to_cql(['grp1'], [])
+    
+
+test_acl_cdmi_to_cql()
 
 def test_str_to_acemask():
     assert str_to_acemask("none", True) == 0x0
