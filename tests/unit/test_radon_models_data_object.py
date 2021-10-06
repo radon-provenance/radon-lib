@@ -22,16 +22,23 @@ from datetime import datetime
 import json
 
 
-from radon.models.data_object import DataObject
+from radon.model import (
+    DataObject
+)
+from radon.database import (
+    connect,
+    create_default_users,
+    create_root,
+    create_tables,
+    destroy,
+    initialise,
+)
 from radon import cfg
-from radon.models import connect
-from radon.models.acl import (
+from radon.model.acl import (
     Ace,
     acl_list_to_cql
 )
 
-# Populated by create_test_env
-TEST_KEYSPACE = "radon_pytest"
 TEST_CONTENT = "Test Data".encode()
 TEST_CONTENT1 = "This ".encode()
 TEST_CONTENT2 = "is ".encode()
@@ -39,16 +46,29 @@ TEST_CONTENT3 = "a ".encode()
 TEST_CONTENT4 = "test.".encode()
 
 
-def test_create():
-    cfg.dse_keyspace = TEST_KEYSPACE
-    connect()
+TEST_KEYSPACE = "test_keyspace"
 
+
+def setup_module():
+    cfg.dse_keyspace = TEST_KEYSPACE
+    initialise()
+    connect()
+    create_tables()
+    create_default_users()
+    create_root()
+
+
+def teardown_module(module):
+    destroy()
+
+def test_create():
     do = DataObject.create(TEST_CONTENT)
     data = []
     for chk in do.chunk_content():
         data.append(chk)
     res = b"".join([s for s in data])
     assert res == TEST_CONTENT
+    assert do.get_url() == cfg.protocol_cassandra + do.uuid
     do.delete()
 
     do = DataObject.create(TEST_CONTENT, compressed=True)
@@ -60,52 +80,9 @@ def test_create():
     assert content == TEST_CONTENT
     do.delete()
 
-    meta = {"test": "value"}
-    now = datetime.now()
-    do = DataObject.create(TEST_CONTENT,
-                           metadata=meta,
-                           create_ts=now)
-    assert do.create_ts == now
-    assert do.metadata == meta
-    do.delete()
-
-    list_read = ['grp1']
-    list_write = ['grp1']
-    acl_dict = {"grp1": Ace(acetype="ALLOW", identifier="grp1", 
-                               aceflags=0, acemask=95)
-               }
-    do = DataObject.create(TEST_CONTENT,
-                           acl=acl_dict)
-    assert do.acl == acl_dict
-    do.delete()
-
-
-def test_create_acl():
-    cfg.dse_keyspace = TEST_KEYSPACE
-    connect()
-    
-    list_read = ['grp1']
-    list_write = ['grp1']
-    acl_cql_string = acl_list_to_cql(list_read, list_write)
-    do = DataObject.create(TEST_CONTENT)
-    do.create_acl(acl_cql_string)
-    
-    do = DataObject.find(do.uuid)
-    assert do.acl['grp1']['acemask'] == 95 # read/write
-    do.delete()
-    
-    do = DataObject.create(TEST_CONTENT)
-    do.create_acl_list(list_read, list_write)
-    
-    do = DataObject.find(do.uuid)
-    assert do.acl['grp1']['acemask'] == 95 # read/write
-    do.delete()
 
 
 def test_delete_id():
-    cfg.dse_keyspace = TEST_KEYSPACE
-    connect()
-    
     do = DataObject.create(TEST_CONTENT)
     
     DataObject.delete_id(do.uuid)
@@ -117,38 +94,18 @@ def test_update():
     cfg.dse_keyspace = TEST_KEYSPACE
     connect()
 
-    list_read = ['grp1']
-    list_write = ['grp1']
-
     do = DataObject.create(TEST_CONTENT)
-    do.update(type="text", blob=TEST_CONTENT)
+    do.update(blob=TEST_CONTENT)
     do = DataObject.find(do.uuid)
-    assert do.type == "text"
     assert do.blob == TEST_CONTENT
-    do.delete()
-
-    do = DataObject.create(TEST_CONTENT)
-    acl_cql_string = acl_list_to_cql(list_read, list_write)
-    do.update_acl(acl_cql_string)
-    do = DataObject.find(do.uuid)
-    assert do.acl['grp1']['acemask'] == 95 # read/write
-    do.delete()
-
-    do = DataObject.create(TEST_CONTENT)
-    do.update_acl_list(list_read, list_write)
-    do = DataObject.find(do.uuid)
-    assert do.acl['grp1']['acemask'] == 95 # read/write
     do.delete()
 
 
 def test_append():
-    cfg.dse_keyspace = TEST_KEYSPACE
-    connect()
-    
     do = DataObject.create(TEST_CONTENT1)
-    DataObject.append_chunk(do.uuid, TEST_CONTENT2, 1)
-    DataObject.append_chunk(do.uuid, TEST_CONTENT3, 2)
-    DataObject.append_chunk(do.uuid, TEST_CONTENT4, 3)
+    DataObject.append_chunk(do.uuid, 1, TEST_CONTENT2)
+    DataObject.append_chunk(do.uuid, 2, TEST_CONTENT3)
+    DataObject.append_chunk(do.uuid, 3, TEST_CONTENT4)
     do = DataObject.find(do.uuid)
     data = []
     for chk in do.chunk_content():
@@ -157,15 +114,17 @@ def test_append():
     DataObject.delete_id(do.uuid)
     
     do = DataObject.create(TEST_CONTENT1, compressed=True)
-    DataObject.append_chunk(do.uuid, TEST_CONTENT2, 1, True)
-    DataObject.append_chunk(do.uuid, TEST_CONTENT3, 2, True)
-    DataObject.append_chunk(do.uuid, TEST_CONTENT4, 3, True)
+    DataObject.append_chunk(do.uuid, 1, TEST_CONTENT2, True)
+    DataObject.append_chunk(do.uuid, 2, TEST_CONTENT3, True)
+    DataObject.append_chunk(do.uuid, 3, TEST_CONTENT4, True)
     do = DataObject.find(do.uuid)
     data = []
     for chk in do.chunk_content():
         data.append(chk)
     assert b"".join(data) == b'This is a test.'
     DataObject.delete_id(do.uuid)
+
+
 
 
 

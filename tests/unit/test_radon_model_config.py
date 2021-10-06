@@ -13,8 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import os
 
+import os
+import pytest
+
+from radon import cfg
 from radon import Config
 from radon.model.config import (
     DEFAULT_DSE_HOST,
@@ -54,6 +57,33 @@ def test_config():
     assert cfg.dse_keyspace == DEFAULT_DSE_KEYSPACE
     assert cfg.dse_strategy == DEFAULT_DSE_STRATEGY
     assert cfg.dse_repl_factor == DEFAULT_DSE_REPL_FACTOR
+
+
+def test_to_dict():
+    cfg_dict = cfg.to_dict()
+    test_dict = {
+        "dse_host" : cfg.dse_host,
+        "dse_keyspace" : cfg.dse_keyspace,
+        "dse_dc_replication_map" : cfg.dse_dc_replication_map,
+        "dse_strategy" : cfg.dse_strategy,
+        "dse_repl_factor": cfg.dse_repl_factor,
+        "mqtt_host" : cfg.mqtt_host,
+        "debug" : cfg.debug
+    }
+    assert cfg_dict == test_dict
+
+
+def test_repr():
+    test_dict = {
+        "dse_host" : cfg.dse_host,
+        "dse_keyspace" : cfg.dse_keyspace,
+        "dse_dc_replication_map" : cfg.dse_dc_replication_map,
+        "dse_strategy" : cfg.dse_strategy,
+        "dse_repl_factor": cfg.dse_repl_factor,
+        "mqtt_host" : cfg.mqtt_host,
+        "debug" : cfg.debug
+    }
+    assert str(test_dict) == str(cfg)
 
 
 

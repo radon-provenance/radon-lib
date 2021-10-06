@@ -18,19 +18,39 @@ import pytest
 import uuid
 
 from radon import cfg
-from radon.models import connect
-from radon.models.user import User
-from radon.models.errors import UserConflictError
+from radon.database import (
+    connect,
+    create_default_users,
+    create_root,
+    create_tables,
+    destroy,
+    initialise,
+)
+from radon.model import (
+    Group,
+    User
+)
+from radon.model.errors import(
+    UserConflictError
+)
+
+TEST_KEYSPACE = "test_keyspace"
 
 
-# Populated by create_test_env
-TEST_KEYSPACE = "radon_pytest"
-
-
-
-def test_authenticate():
+def setup_module():
     cfg.dse_keyspace = TEST_KEYSPACE
+    initialise()
     connect()
+    create_tables()
+    create_default_users()
+    create_root()
+
+
+def teardown_module(module):
+    destroy()
+
+
+def test_authenticate(mocker):
     user_name = uuid.uuid4().hex
     email = uuid.uuid4().hex
     password = uuid.uuid4().hex
@@ -45,13 +65,21 @@ def test_authenticate():
     user = User.find(user_name)
     
     assert user.authenticate(password)
-    assert not user.authenticate(uuid.uuid4().hex)
+    assert not user.authenticate(uuid.uuid4().hex)    
+    
+    # Check ldap authentication (mock the actual test)
+    cfg.auth_ldap_server_uri = "ldap://ldap.example.com"
+    cfg.auth_ldap_user_dn_template = "uid=%(user)s,ou=users,dc=example,dc=com"
+    mocker.patch('ldap.ldapobject.SimpleLDAPObject.simple_bind_s', return_value=True)
+    user.update(ldap=True)
+    assert user.authenticate(password)
+    
+    # Check inactive user
+    user.update(active=False)
+    assert not user.authenticate(password)
 
 
 def test_users():
-    cfg.dse_keyspace = TEST_KEYSPACE
-    connect()
-
     user_name = uuid.uuid4().hex
     email = uuid.uuid4().hex
     password = uuid.uuid4().hex
@@ -89,9 +117,6 @@ def test_users():
 
 
 def test_dict():
-    cfg.dse_keyspace = TEST_KEYSPACE
-    connect()
-
     user_name = uuid.uuid4().hex
     email = uuid.uuid4().hex
     password = uuid.uuid4().hex
@@ -114,9 +139,6 @@ def test_dict():
 
 
 def test_update():
-    cfg.dse_keyspace = TEST_KEYSPACE
-    connect()
-
     user_name = uuid.uuid4().hex
     email = uuid.uuid4().hex
     password = uuid.uuid4().hex
@@ -136,6 +158,28 @@ def test_update():
     user.update(email=new_email, username=notification_username)
     user = User.find(user_name)
 
+
+def test_group():
+    grp1_name = uuid.uuid4().hex
+    grp2_name = uuid.uuid4().hex
+    grp1 = Group.create(name=grp1_name)
+    grp2 = Group.create(name=grp2_name)
+    
+    user_name = uuid.uuid4().hex
+    email = uuid.uuid4().hex
+    password = uuid.uuid4().hex
+    administrator = True
+    groups = [grp1_name, grp2_name]
+    user = User.create(name=user_name,
+                       email=email,
+                       password=password, 
+                       administrator=administrator,
+                       groups=groups)
+    
+    assert set(user.get_groups()) == set([grp1_name, grp2_name])
+    
+    user.rm_group(grp1_name)
+    assert set(user.get_groups()) == set([grp2_name])
 
 
 

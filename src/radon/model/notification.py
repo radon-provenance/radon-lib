@@ -1,17 +1,17 @@
-"""Copyright 2019 - 
+# Copyright 2021
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-"""
 
 from dse.cqlengine import columns
 from dse.cqlengine.models import connection, Model
@@ -19,9 +19,13 @@ from dse.query import SimpleStatement
 import json
 import logging
 import paho.mqtt.publish as publish
-
-from radon import cfg
-from radon.util import default_date, default_time, last_x_days
+ 
+import radon
+from radon.util import (
+    default_date,
+    default_time,
+    last_x_days
+)
 
 
 # Operations that could lead to a new notification
@@ -144,7 +148,33 @@ TEMPLATES[OP_UPDATE][
 
 
 class Notification(Model):
-    """Notification Model"""
+    """Notification Model
+    
+    This is used to store notifications for later use (audit or rule engine)
+    
+    :param date: A simple date used to partition notification
+    :type date: :class:`columns.Text`
+    :param when: The full date/time fir the notification
+    :type when: :class:`columns.TimeUUID`
+    :param operation: The type of operation (Create, Delete, Update, Index, 
+      Move...)
+    :type operation: :class:`columns.Text`
+    :param object_type: The type of the object concerned (Collection, Resource,
+      User, Group, ...)
+    :type object_type: :class:`columns.Text`
+    :param object_uuid: The uuid of the object concerned, the key used to find
+      the object
+    :type object_uuid: :class:`columns.Text`
+    :param username: The user who initiates the operation
+    :type username: :class:`columns.Text`
+    :param processed: True if a successful workflow has been executed for this
+      notification
+    :type processed: :class:`columns.Boolean`
+    :param payload: The payload of the message which is sent to MQTT
+    :type payload: :class:`columns.Text`
+    
+    
+    """
 
     date = columns.Text(default=default_date, partition_key=True)
     when = columns.TimeUUID(
@@ -169,7 +199,19 @@ class Notification(Model):
 
     @classmethod
     def create_collection(cls, username, path, payload):
-        """Create a new collection and publish the message on MQTT"""
+        """
+        Create a new collection and publish the message on MQTT
+        
+        :param username: The user who initiates the operation
+        :type username: str
+        :param path: Path of the new collection
+        :type path: str
+        :param payload: The payload of the message which is sent to MQTT
+        :type payload: str
+        
+        :return: The notification
+        :rtype: :class:`columns.model.Notification`
+        """
         new = cls.new(
             operation=OP_CREATE,
             object_type=OBJ_COLLECTION,
@@ -183,7 +225,19 @@ class Notification(Model):
 
     @classmethod
     def create_group(cls, username, uuid, payload):
-        """Create a new group and publish the message on MQTT"""
+        """
+        Create a new group and publish the message on MQTT
+        
+        :param username: The user who initiates the operation
+        :type username: str
+        :param uuid: Name of the new group
+        :type uuid: str
+        :param payload: The payload of the message which is sent to MQTT
+        :type payload: str
+        
+        :return: The notification
+        :rtype: :class:`columns.model.Notification`
+        """
         new = cls.new(
             operation=OP_CREATE,
             object_type=OBJ_GROUP,
@@ -197,7 +251,19 @@ class Notification(Model):
 
     @classmethod
     def create_resource(cls, username, path, payload):
-        """Create a new resource and publish the message on MQTT"""
+        """
+        Create a new resource and publish the message on MQTT
+        
+        :param username: The user who initiates the operation
+        :type username: str
+        :param path: Path of the resource
+        :type path: str
+        :param payload: The payload of the message which is sent to MQTT
+        :type payload: str
+        
+        :return: The notification
+        :rtype: :class:`columns.model.Notification`
+        """
         new = cls.new(
             operation=OP_CREATE,
             object_type=OBJ_RESOURCE,
@@ -211,7 +277,19 @@ class Notification(Model):
 
     @classmethod
     def create_user(cls, username, uuid, payload):
-        """Create a new user and publish the message on MQTT"""
+        """
+        Create a new user and publish the message on MQTT
+        
+        :param username: The user who initiates the operation
+        :type username: str
+        :param uuid: Name of the new user
+        :type uuid: str
+        :param payload: The payload of the message which is sent to MQTT
+        :type payload: str
+        
+        :return: The notification
+        :rtype: :class:`columns.model.Notification`
+        """
         new = cls.new(
             operation=OP_CREATE,
             object_type=OBJ_USER,
@@ -225,7 +303,19 @@ class Notification(Model):
 
     @classmethod
     def delete_collection(cls, username, path, payload):
-        """Delete a collection and publish the message on MQTT"""
+        """
+        Delete a collection and publish the message on MQTT
+        
+        :param username: The user who initiates the operation
+        :type username: str
+        :param path: Path of the deleted collection
+        :type path: str
+        :param payload: The payload of the message which is sent to MQTT
+        :type payload: str
+        
+        :return: The notification
+        :rtype: :class:`columns.model.Notification`
+        """
         new = cls.new(
             operation=OP_DELETE,
             object_type=OBJ_COLLECTION,
@@ -239,7 +329,19 @@ class Notification(Model):
 
     @classmethod
     def delete_group(cls, username, uuid, payload):
-        """Delete a group and publish the message on MQTT"""
+        """
+        Delete a group and publish the message on MQTT
+        
+        :param username: The user who initiates the operation
+        :type username: str
+        :param uuid: Name of the deleted group
+        :type uuid: str
+        :param payload: The payload of the message which is sent to MQTT
+        :type payload: str
+        
+        :return: The notification
+        :rtype: :class:`columns.model.Notification`
+        """
         new = cls.new(
             operation=OP_DELETE,
             object_type=OBJ_GROUP,
@@ -253,7 +355,19 @@ class Notification(Model):
 
     @classmethod
     def delete_resource(cls, username, path, payload):
-        """Delete a resource and publish the message on MQTT"""
+        """
+        Delete a resource and publish the message on MQTT
+        
+        :param username: The user who initiates the operation
+        :type username: str
+        :param path: Path of the resource
+        :type path: str
+        :param payload: The payload of the message which is sent to MQTT
+        :type payload: str
+        
+        :return: The notification
+        :rtype: :class:`columns.model.Notification`
+        """
         new = cls.new(
             operation=OP_DELETE,
             object_type=OBJ_RESOURCE,
@@ -267,7 +381,19 @@ class Notification(Model):
 
     @classmethod
     def delete_user(cls, username, uuid, payload):
-        """Delete a user and publish the message on MQTT"""
+        """
+        Delete a user and publish the message on MQTT
+        
+        :param username: The user who initiates the operation
+        :type username: str
+        :param uuid: Name of the new user
+        :type uuid: str
+        :param payload: The payload of the message which is sent to MQTT
+        :type payload: str
+        
+        :return: The notification
+        :rtype: :class:`columns.model.Notification`
+        """
         new = cls.new(
             operation=OP_DELETE,
             object_type=OBJ_USER,
@@ -281,6 +407,9 @@ class Notification(Model):
 
 
     def mqtt_publish(self):
+        """
+        Try to publish the notification on MQTT
+        """
         topic = u"{0}/{1}/{2}".format(
             self.operation, 
             self.object_type, 
@@ -292,24 +421,37 @@ class Notification(Model):
         topic = topic.replace("#", "").replace("+", "")
         logging.info(u'Publishing on topic "{0}"'.format(topic))
         try:
-            publish.single(topic, self.payload, hostname=cfg.mqtt_host)
+            publish.single(topic, self.payload, hostname=radon.cfg.mqtt_host)
         except:
             self.update(processed=False)
             logging.error(u'Problem while publishing on topic "{0}"'.format(topic))
 
     @classmethod
     def new(cls, **kwargs):
-        """Create"""
+        """
+        Create a new Notification
+        
+        :return: The notification
+        :rtype: :class:`columns.model.Notification`"""
         new = super(Notification, cls).create(**kwargs)
         return new
 
     @classmethod
     def recent(cls, count=20):
-        """Return the last activities"""
+        """
+        Return the latest activities
+        
+        :param count: The number of notifications we want to get
+        :type count: int
+        
+        :return: A list of 'count' notifications (or less if there are not 
+          enough yet in the base)
+        :rtype: List[:class:`columns.model.Notification`]
+        """
         #         return Notification.objects.filter(date__in=last_x_days())\
         #             .order_by("-when").all().limit(count)
         session = connection.get_session()
-        keyspace = cfg.dse_keyspace
+        keyspace = radon.cfg.dse_keyspace
         session.set_keyspace(keyspace)
         # I couldn't find how to disable paging in cqlengine in the "model" view
         # so I create the cal query directly
@@ -330,10 +472,23 @@ class Notification(Model):
         return res
 
     def tmpl(self):
+        """
+        Return the template associated to the notification (based on the 
+        operation and the object involved
+        
+        :return: The string template that will be used to create meaningful
+          messages in the web interface/
+        :rtype: str
+        """
         return TEMPLATES[self.operation][self.object_type]
 
     def to_dict(self, user=None):
-        """Return a dictionary which describes a notification for the web ui"""
+        """
+        Return a dictionary which describes a notification for the web ui
+        
+        :return: The dictionary with the information needed for the UI
+        :rtype: dict
+        """
         data = {
             "date": self.date,
             "when": self.when,
@@ -348,7 +503,19 @@ class Notification(Model):
 
     @classmethod
     def update_collection(cls, username, path, payload):
-        """Update a collection and publish the message on MQTT"""
+        """
+        Update a  collection and publish the message on MQTT
+        
+        :param username: The user who initiates the operation
+        :type username: str
+        :param path: Path of the collection
+        :type path: str
+        :param payload: The payload of the message which is sent to MQTT
+        :type payload: str
+        
+        :return: The notification
+        :rtype: :class:`columns.model.Notification`
+        """
         new = cls.new(
             operation=OP_UPDATE,
             object_type=OBJ_COLLECTION,
@@ -362,7 +529,19 @@ class Notification(Model):
 
     @classmethod
     def update_group(cls, username, uuid, payload):
-        """Update a group and publish the message on MQTT"""
+        """
+        Update a group and publish the message on MQTT
+        
+        :param username: The user who initiates the operation
+        :type username: str
+        :param uuid: Name of the group
+        :type uuid: str
+        :param payload: The payload of the message which is sent to MQTT
+        :type payload: str
+        
+        :return: The notification
+        :rtype: :class:`columns.model.Notification`
+        """
         new = cls.new(
             operation=OP_UPDATE,
             object_type=OBJ_GROUP,
@@ -376,7 +555,19 @@ class Notification(Model):
 
     @classmethod
     def update_resource(cls, username, path, payload):
-        """Update a resource and publish the message on MQTT"""
+        """
+        Update a resource and publish the message on MQTT
+        
+        :param username: The user who initiates the operation
+        :type username: str
+        :param path: Path of the resource
+        :type path: str
+        :param payload: The payload of the message which is sent to MQTT
+        :type payload: str
+        
+        :return: The notification
+        :rtype: :class:`columns.model.Notification`
+        """
         new = cls.new(
             operation=OP_UPDATE,
             object_type=OBJ_RESOURCE,
@@ -390,7 +581,19 @@ class Notification(Model):
 
     @classmethod
     def update_user(cls, username, uuid, payload):
-        """Update a user and publish the message on MQTT"""
+        """
+        Update a user and publish the message on MQTT
+        
+        :param username: The user who initiates the operation
+        :type username: str
+        :param uuid: Name of the user
+        :type uuid: str
+        :param payload: The payload of the message which is sent to MQTT
+        :type payload: str
+        
+        :return: The notification
+        :rtype: :class:`columns.model.Notification`
+        """
         new = cls.new(
             operation=OP_UPDATE,
             object_type=OBJ_USER,
@@ -401,3 +604,5 @@ class Notification(Model):
         )
         new.mqtt_publish()
         return new
+
+

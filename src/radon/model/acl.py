@@ -1,17 +1,17 @@
-"""Copyright 2019 - 
+# Copyright 2021
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-"""
 
 # aceflag: an int value taken from the constant ACEFLAG_*
 # acemask:  an int value taken from the constant ACEMASK_*
@@ -19,11 +19,13 @@ limitations under the License.
 # cdmi_str: A comma separated list of flags or masks, used in cdmi
 #             ("READ_ACL, READ_ATTRIBUTES", ..)
 
-from collections import OrderedDict
+
 from dse.cqlengine.usertype import UserType
 from dse.cqlengine import columns
+from collections import OrderedDict
 
-from radon.models import Group
+import radon
+from radon.model import Group
 
 
 # ACE Flags for ACL in CDMI
@@ -56,6 +58,11 @@ ACEMASK_READ_ACL = 0x00020000
 ACEMASK_WRITE_ACL = 0x00040000
 ACEMASK_WRITE_OWNER = 0x00080000
 ACEMASK_SYNCHRONIZE = 0x00100000
+
+ACCESS_STR_NONE = "none"
+ACCESS_STR_READ = "read"
+ACCESS_STR_WRITE = "write"
+ACCESS_STR_RW = "read/write"
 
 # Ace flags table
 ACEFLAG_TABLE = [
@@ -100,7 +107,6 @@ ACEMASK_STR_INT_OBJ = {
     "WRITE_OWNER": 0x00080000,
     "WRITE_ACL": 0x00040000,
     "READ_ACL": 0x00020000,
-    "DELETE": 0x00010000,
     "WRITE_RETENTION_HOLD": 0x00000400,
     "WRITE_RETENTION": 0x00000200,
     "WRITE_ATTRIBUTES": 0x00000100,
@@ -115,10 +121,10 @@ ACEMASK_STR_INT_OBJ = {
 }
 
 ACEMASK_INT_STR_OBJ = {
-    0x0: "none",
-    0x09: "read",
-    0x56: "write",
-    0x5F: "read/write",
+    0x0: ACCESS_STR_NONE,
+    0x09: ACCESS_STR_READ,
+    0x56: ACCESS_STR_WRITE,
+    0x5F: ACCESS_STR_RW,
 }
 
 ACEMASK_STR_INT_COL = {
@@ -133,7 +139,6 @@ ACEMASK_STR_INT_COL = {
     "WRITE_OWNER": 0x00080000,
     "WRITE_ACL": 0x00040000,
     "READ_ACL": 0x00020000,
-    "DELETE": (ACEMASK_DELETE | ACEMASK_DELETE_OBJECT | ACEMASK_DELETE_SUBCONTAINER),
     "WRITE_RETENTION_HOLD": 0x00000400,
     "WRITE_RETENTION": 0x00000200,
     "WRITE_ATTRIBUTES": 0x00000100,
@@ -148,10 +153,10 @@ ACEMASK_STR_INT_COL = {
 }
 
 ACEMASK_INT_STR_COL = {
-    0x0: "none",
-    0x09: "read",
-    0x56: "write",
-    0x5F: "read/write",
+    0x0: ACCESS_STR_NONE,
+    0x09: ACCESS_STR_READ,
+    0x56: ACCESS_STR_WRITE,
+    0x5F: ACCESS_STR_RW,
 }
 
 ACEFLAG_STR_INT = {
@@ -173,6 +178,8 @@ def aceflag_to_cdmi_str(num_value):
 
     :param num_value: ACE flag numeric value
     :type num_value: integer
+    
+    :return: The string value for the aceflag
     :rtype: string
     """
     if num_value == 0:
@@ -180,12 +187,12 @@ def aceflag_to_cdmi_str(num_value):
     res = []
     for idx in range(len(ACEFLAG_TABLE)):
         if num_value == 0:
-            return ", ".join(res)
+            return ', '.join(res)
 
         if num_value & ACEFLAG_TABLE[idx][0] == ACEFLAG_TABLE[idx][0]:
             res.append(ACEFLAG_TABLE[idx][1])
             num_value = num_value ^ ACEFLAG_TABLE[idx][0]
-    return ", ".join(res)
+    return ', '.join(res)
 
 
 def acemask_to_cdmi_str(num_value, is_object):
@@ -198,12 +205,14 @@ def acemask_to_cdmi_str(num_value, is_object):
     :type num_value: integer
     :param is_object: True if the ACE relates to an object, False for a collection
     :type is_object: boolean
+    
+    :return: The string value for the acemask
     :rtype: string
     """
     res = []
     for idx in range(len(ACEMASK_TABLE)):
         if num_value == 0:
-            return ", ".join(res)
+            return ', '.join(res)
 
         if num_value & ACEMASK_TABLE[idx][0] == ACEMASK_TABLE[idx][0]:
             if is_object:
@@ -211,22 +220,48 @@ def acemask_to_cdmi_str(num_value, is_object):
             else:
                 res.append(ACEMASK_TABLE[idx][2])
             num_value = num_value ^ ACEMASK_TABLE[idx][0]
-    return ", ".join(res)
+    return ', '.join(res)
+
 
 def acemask_to_str(acemask, is_object):
-    """Return the simplified access level from an acemask"""
+    """Return the simplified access level from an acemask
+    
+    :param acemask: is in [0x0, 0x09, 0x56, 0x5F] which is translated to
+                    "none, "read", "write" or "read/write"
+    :type acemask: int
+    :param is_object: defined if the mask corresponds to a data object or a
+                     collection. They are similar but the CDMI standard 
+                     separate them so we may need the option
+    :type is_object: bool
+
+    :return: the string that corresponds to the mask
+    :rtype: str
+    """
     if is_object:
         return ACEMASK_INT_STR_OBJ.get(acemask, "")
     else:
         return ACEMASK_INT_STR_COL.get(acemask, "")
 
+
 def acl_cdmi_to_cql(cdmi_acl):
+    """Convert a list of ACL for groups stored in cdmi format to the cql 
+    string used to update the Cassandra model
+    
+    :param cdmi_acl: a cdmi string for
+    :type cdmi_acl: List[dict]
+    
+    :return: A CQL string that can be used to update values in Cassandra
+    :rtype: str
+    """
     ls_access = []
     for cdmi_ace in cdmi_acl:
-        if "identifier" in cdmi_ace:
-            gid = cdmi_ace["identifier"]
+        if 'identifier' in cdmi_ace:
+            gid = cdmi_ace['identifier']
         else:
             # Wrong syntax for the ace
+            radon.cfg.logger.warning(
+                "Wrong format for the cdmi string for ACL, 'identifier' field not found"
+            )
             continue
         group = Group.find(gid)
         if group:
@@ -236,36 +271,47 @@ def acl_cdmi_to_cql(cdmi_acl):
         elif gid.upper() == "ANONYMOUS@":
             ident = "ANONYMOUS@"
         else:
-            # TODO log or return error if the identifier isn't found ?
+            radon.cfg.logger.warning(
+                "Wrong format for the cdmi string for ACL, {} group not found".format(
+                    gid)
+            )
             continue
-        s = (
-            u"'{}': {{"
-            "acetype: '{}', "
-            "identifier: '{}', "
-            "aceflags: {}, "
-            "acemask: {}"
-            "}}"
-        ).format(
-            ident,
-            cdmi_ace["acetype"].upper(),
-            ident,
-            cdmi_str_to_aceflag(cdmi_ace["aceflags"]),
-            cdmi_str_to_acemask(cdmi_ace["acemask"], False),
-        )
+        s = (u"'{}': {{"
+              "acetype: '{}', "
+              "identifier: '{}', "
+              "aceflags: {}, "
+              "acemask: {}"
+              "}}").format(ident,
+                          cdmi_ace['acetype'].upper(),
+                          ident,
+                          cdmi_str_to_aceflag(cdmi_ace['aceflags']),
+                          cdmi_str_to_acemask(cdmi_ace['acemask'], False)
+                         )
         ls_access.append(s)
     acl = u"{{{}}}".format(", ".join(ls_access))
     return acl
 
 
 def acl_list_to_cql(read_access, write_access):
+    """Convert a list of read/write access for groups to the cql string used
+    to update the Cassandra model
+    
+    :param read_access: A list of group names which have read access
+    :type read_access: List[str]
+    :param write_access: A list of group names which have write access
+    :type write_access: List[str]
+
+    :return: A CQL string that can be used to update values in Cassandra
+    :rtype: str
+    """
     access = {}
     for gname in read_access:
-        access[gname] = "read"
+        access[gname] = ACCESS_STR_READ
     for gname in write_access:
         if gname in access:
-            access[gname] = "read/write"
+            access[gname] = ACCESS_STR_RW
         else:
-            access[gname] = "write"
+            access[gname] = ACCESS_STR_WRITE
     ls_access = []
     for gname in access:
         g = Group.find(gname)
@@ -275,7 +321,13 @@ def acl_list_to_cql(read_access, write_access):
             ident = "AUTHENTICATED@"
         elif gname.upper() == "ANONYMOUS@":
             ident = "ANONYMOUS@"
-        else: # TODO log or return error if the identifier isn't found ?
+        else: 
+            # TODO log or return error if the identifier isn't found ?
+            radon.cfg.logger.warning(
+                "The group {0} doesn't exist".format(
+                    gname
+                )
+            )
             continue
         s = (
             u"'{}': {{"
@@ -290,16 +342,16 @@ def acl_list_to_cql(read_access, write_access):
     return acl
 
 
-def str_to_acemask(lvl, is_object):
-    """Return the acemask from a simplified access level"""
-    if is_object:
-        return ACEMASK_STR_INT_OBJ.get(lvl.upper(), 0)
-    else:
-        return ACEMASK_STR_INT_COL.get(lvl.upper(), 0)
-
-
 def cdmi_str_to_aceflag(cdmi_str):
-    """Return the aceflag from a cdmi string"""
+    """
+    Return the aceflag from a cdmi string
+    
+    :param cdmi_str: A comma-separated list of aceflags
+    :type cdmi_str: str
+    
+    :return: The aceflag created from the string
+    :rtype: int
+    """
     aceflag = 0
     ls_flag = cdmi_str.split(",")
     for flag in ls_flag:
@@ -309,7 +361,17 @@ def cdmi_str_to_aceflag(cdmi_str):
 
 
 def cdmi_str_to_acemask(cdmi_str, is_object):
-    """Return the acemask from a cdmi string"""
+    """
+    Return the aceflag from a cdmi string
+    
+    :param cdmi_str: A comma-separated list of aceflags
+    :type cdmi_str: str
+    :param is_object: True if the ACE relates to an object, False for a collection
+    :type is_object: boolean
+    
+    :return: The aceflag created from the string
+    :rtype: int
+    """
     if is_object:
         map_dict = ACEMASK_STR_INT_OBJ
     else:
@@ -323,15 +385,18 @@ def cdmi_str_to_acemask(cdmi_str, is_object):
 
 
 def serialize_acl_metadata(obj):
-    """obj: Collection or Resource"""
-    # Create a dictionary of acl from object metadata (stored in Cassandra
-    # lists)
-    from radon.models.resource import Resource
+    """
+    Create a dictionary of acl from object metadata (stored in Cassandra
+    dictionary)
+    
+    :param obj: A Collection or a resource
+    :type obj: :class:`radon.model.Collection` or :class:`radon.model.Resource`
+    """
+    from radon.model import Resource
     is_object = isinstance(obj, Resource)
-    acl = obj.get_acl()
     mapped_md = []
     # Create a list of ACE from the dictionary we created
-    for _, ace in acl.items():
+    for _, ace in obj.node.acl.items():
         acl_md = OrderedDict()
         acl_md["acetype"] = ace.acetype
         acl_md["identifier"] = ace.identifier
@@ -340,8 +405,26 @@ def serialize_acl_metadata(obj):
         acemask = ace.acemask
         acl_md["acemask"] = acemask_to_cdmi_str(acemask, is_object)
         mapped_md.append(acl_md)
-
     return {"cdmi_acl": mapped_md}
+
+
+def str_to_acemask(lvl, is_object):
+    """Return the acemask from a simplified access level
+    
+    :param lvl: the access level to map, in  "none, "read", "write" or 
+                "read/write"
+    :type lvl: str
+    :param is_object: defined if the level corresponds to a data object or a
+                     collection.
+    :type is_object: bool
+    
+    :return: The corresponding acemask, in [0x0, 0x09, 0x56, 0x5F]
+    :rtype: int
+    """
+    if is_object:
+        return ACEMASK_STR_INT_OBJ.get(lvl.upper(), 0)
+    else:
+        return ACEMASK_STR_INT_COL.get(lvl.upper(), 0)
 
 
 class Ace(UserType):
@@ -368,6 +451,14 @@ class Ace(UserType):
 
     The mask field of an ACE contains a set of permissions allowed or denied.
 
+    :param acetype: ALLOW or DENY
+    :type acetype: :class:`columns.Text`
+    :param identifier: groups the ACL refers to
+    :type identifier: :class:`columns.Text`
+    :param aceflags: not used yet
+    :type aceflags: :class:`columns.Integer`
+    :param acemask: the mask that defines the access (read, write, r/w or none)
+    :type acemask: :class:`columns.Integer`
     """
 
     acetype = columns.Text()
@@ -378,10 +469,18 @@ class Ace(UserType):
     
     
     def __str__(self):
+        """ 
+        ACE object represented as a string
+        
+        :return: A string representation
+        :rtype: str
+        """
         return "(acetype: {}, identifier: {}, aceflags: {}, acemask: {})".format(
             self.acetype,
             self.identifier,
             self.aceflags,
             self.acemask)
+
+
 
 

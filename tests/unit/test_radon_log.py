@@ -1,4 +1,4 @@
-"""Copyright 2020 - 
+"""Copyright 2021
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ from radon.log import init_logger
 
 def test_debug_logger(caplog):
     cfg.debug = True
-    logger = init_logger("test_debug")
+    logger = init_logger("test_debug", cfg)
 
     with caplog.at_level(logging.DEBUG):
         logger.debug("debug")
@@ -30,13 +30,16 @@ def test_debug_logger(caplog):
     assert "debug" in caplog.text
     assert "error" in caplog.text
 
+
 def test_default_logger(caplog):
     cfg.debug = False
-    logger = init_logger("test_default")
+    logger = init_logger("test_default", cfg)
 
     with caplog.at_level(logging.DEBUG):
         logger.debug("debug")
         logger.critical("error")
     assert "debug" not in caplog.text
     assert "error" in caplog.text
+
+
 

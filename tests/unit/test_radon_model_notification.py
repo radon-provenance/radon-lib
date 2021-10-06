@@ -1,4 +1,4 @@
-"""Copyright 2020 - 
+"""Copyright 2021
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,17 +17,35 @@ import pytest
 
 from radon.util import default_uuid
 from radon import cfg
-from radon.models import connect
-from radon.models.notification import (
+from radon.database import (
+    connect,
+    create_default_users,
+    destroy,
+    initialise,
+    create_root,
+    create_tables
+)
+from radon.model.notification import (
     Notification,
     OBJ_USER,
     OP_CREATE
 )
 
 
+TEST_KEYSPACE = "test_keyspace"
 
-# Populated by create_test_env
-TEST_KEYSPACE = "radon_pytest"
+
+def setup_module():
+    cfg.dse_keyspace = TEST_KEYSPACE
+    initialise()
+    connect()
+    create_tables()
+    create_default_users()
+    create_root()
+
+
+def teardown_module(module):
+    destroy()
 
 
 def test_publish():
@@ -50,9 +68,13 @@ def test_publish():
 def test_recent():
     cfg.dse_keyspace = TEST_KEYSPACE
     connect()
+    # If count is high it may be possible that this test fails (if there are
+    # less notification than 'high' in the table
+    recent = Notification.recent(count=2)
+    assert len(recent) == 2
 
-    recent = Notification.recent(count=10)
-    assert len(recent) == 10
-    
+
+
+
 
 
