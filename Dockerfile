@@ -8,7 +8,7 @@ ENV MQTT_HOST 172.17.0.5
 ENV CQLENG_ALLOW_SCHEMA_MANAGEMENT 1
 
 RUN apt-get -y update &&  \
-    apt-get install -y nano less && \
+    apt-get install -y nano less libldap2-dev libsasl2-dev && \
     pip install --upgrade pip
 
 # Create destination folders
