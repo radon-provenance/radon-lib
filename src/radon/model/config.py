@@ -54,8 +54,7 @@ DEFAULT_USERS = [
 
 
 # Max size for Data Object blobs
-#CHUNK_SIZE = 1048576
-CHUNK_SIZE = 700
+CHUNK_SIZE = 1048576
 # Compress Data Object data in Cassandra
 COMPRESS_DO = False
 PROTOCOL_CASSANDRA = "cassandra://"
