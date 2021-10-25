@@ -1,16 +1,16 @@
-blessings
+blessings==1.7
 crcmod==1.7
-docopt
-dse-driver==2.11.0
-passlib==1.6.2
-paho-mqtt==1.4
-python-dotenv
-python-ldap
+docopt==0.6.2
+dse-driver==2.11.1
+passlib==1.7.4
+paho-mqtt==1.6.1
+python-dotenv==0.19.1
+python-ldap==3.3.1
 
-pytest
-pytest-cov
-faker
-cli-test-helpers
+pytest==6.2.5
+pytest-cov==3.0.0
+faker==9.5.2
+cli-test-helpers==1.0.1
 
-#dse-graph==1.0.0
-#docker
+#dse-graph==1.9.0 
+#docker==5.0.3
