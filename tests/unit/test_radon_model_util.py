@@ -176,9 +176,7 @@ def test_is_reference():
 def test_is_resource():
     #assert is_resource("/test.url")
     #assert is_reference("/test.url")
-    print("test")
-    print(is_resource("/coll1/test.txt"))
-    #assert is_resource("/coll1/test.txt")
+    assert is_resource("/coll1/test.txt")
     #assert not is_resource("/undefined_coll/test.txt")
 
 

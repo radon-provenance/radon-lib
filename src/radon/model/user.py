@@ -301,7 +301,6 @@ class User(Model):
         if "password" in kwargs:
             kwargs["password"] = encrypt_password(kwargs["password"])
 
-        print("update", kwargs)
         if "username" in kwargs:
             username = kwargs["username"]
             del kwargs["username"]
