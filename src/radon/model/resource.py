@@ -607,10 +607,13 @@ class Resource(ABC):
         now_date = now()
         
         # Metadata given in cdmi format are transformed to be stored in Cassandra
-        if "metadata" in kwargs:
-            kwargs["user_meta"] = meta_cdmi_to_cassandra(kwargs["metadata"])
+        if 'metadata' in kwargs:
+            kwargs['user_meta'] = kwargs['metadata']
             del kwargs["metadata"]
-
+         
+        if "user_meta" in kwargs:
+            kwargs["user_meta"] = meta_cdmi_to_cassandra(kwargs["user_meta"])
+        
         sys_meta = self.node.sys_meta
         sys_meta[radon.cfg.meta_modify_ts] = encode_meta(now_date)
         kwargs["sys_meta"] = sys_meta
