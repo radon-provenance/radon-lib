@@ -218,6 +218,8 @@ class Collection(object):
         """
         # If version is not provided we need to query first to get all versions
         # and read the current version in any row (static column)
+        if not path.endswith("/"):
+            return None
         if path == "/":
             container = '/'
             name = '.'
