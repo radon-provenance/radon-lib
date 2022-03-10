@@ -271,7 +271,7 @@ class Resource(ABC):
             "mimetype": self.get_mimetype() or "application/octet-stream",
             "type": self.get_mimetype(),
             "create_ts": self.get_create_ts(),
-            "modified_ts": self.get_modify_ts(),
+            "modify_ts": self.get_modify_ts(),
         }
         return data
 
@@ -499,7 +499,7 @@ class Resource(ABC):
         payload["container"] = self.container
         payload["name"] = self.get_name()
         payload["create_ts"] = self.get_create_ts()
-        payload["modified_ts"] = self.get_modify_ts()
+        payload["modify_ts"] = self.get_modify_ts()
         payload["metadata"] = self.get_cdmi_user_meta()
         return payload
 
