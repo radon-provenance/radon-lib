@@ -107,7 +107,7 @@ class Collection(object):
         """
         from radon.model import Notification
         from radon.model import Resource
-        
+                
         if not name.endswith("/"):
             name = name + '/'
         if not container.endswith("/"):
@@ -131,7 +131,6 @@ class Collection(object):
             user_meta = {}
         else:
             user_meta = metadata
-        
         sys_meta = {
             radon.cfg.meta_create_ts: encode_meta(now_date),
             radon.cfg.meta_modify_ts: encode_meta(now_date)
@@ -143,7 +142,6 @@ class Collection(object):
             user_meta=user_meta,
             sys_meta=sys_meta
         )
-         
         if not creator:
             creator = radon.cfg.sys_lib_user
         
@@ -151,8 +149,6 @@ class Collection(object):
         state = new.mqtt_get_state()
         payload = new.mqtt_payload({}, state)
         Notification.create_collection(creator, path, payload)
-#         # Index the collection
-#         new.index()
         return new
 
 

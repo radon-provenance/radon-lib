@@ -23,5 +23,6 @@ from radon.model.tree_node import TreeNode
 from radon.model.user import User
 from radon.model.collection import Collection
 from radon.model.resource import Resource
+from radon.model.search import Search
 
 

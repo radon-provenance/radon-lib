@@ -420,11 +420,12 @@ class Notification(Model):
         # script is set to run on such a collection name. But that's what you get if you use stupid names for things.
         topic = topic.replace("#", "").replace("+", "")
         logging.info(u'Publishing on topic "{0}"'.format(topic))
-        try:
-            publish.single(topic, self.payload, hostname=radon.cfg.mqtt_host)
-        except:
-            self.update(processed=False)
-            logging.error(u'Problem while publishing on topic "{0}"'.format(topic))
+        publish.single(topic, self.payload, hostname=radon.cfg.mqtt_host)
+        # try:
+        #     publish.single(topic, self.payload, hostname=radon.cfg.mqtt_host)
+        # except:
+        #     self.update(processed=False)
+        #     logging.error(u'Problem while publishing on topic "{0}"'.format(topic))
 
     @classmethod
     def new(cls, **kwargs):
