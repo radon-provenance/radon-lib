@@ -11,6 +11,3 @@ pytest==6.2.5
 pytest-cov==3.0.0
 faker==9.5.2
 cli-test-helpers==1.0.1
-
-#dse-graph==1.9.0 
-#docker==5.0.3
