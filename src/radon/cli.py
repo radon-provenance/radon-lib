@@ -17,7 +17,7 @@ Radon Admin Command Line Interface.
 
 Usage:
   radmin init
-  radmin drop
+  radmin drop [-f]
   radmin ls [<path>] [-a] [--v=<VERSION>]
   radmin cd [<path>]
   radmin mkdir <path>
@@ -54,6 +54,7 @@ import pickle
  
 import radon
 from radon.database import (
+    create_default_fields,
     create_default_users,
     create_root,
     create_tables,
@@ -147,22 +148,27 @@ class RadonApplication():
         create_tables()
         create_root()
         create_default_users()
+        create_default_fields()
 
         session = self.create_session()
         self.save_session(session)
 
-    def drop(self):
+    def drop(self, args):
         """Remove the keyspace"""
         print("*********************************")
         print("**           WARNING           **")
         print("*********************************")
         print("This will remove every data stored in the database.")
-        confirm = input("Are you sure you want to continue ? [y/N] ")
         
-        if confirm.lower() in ["true", "y", "yes"]:
-            destroy()
-            session = self.create_session()
-            self.save_session(session)
+        if not args["-f"]:
+            confirm = input("Are you sure you want to continue ? [y/N] ")
+        
+            if not confirm.lower() in ["true", "y", "yes"]:
+                return
+        
+        destroy()
+        session = self.create_session()
+        self.save_session(session)
 
 
     def change_dir(self, args):
@@ -671,7 +677,7 @@ def main():
     if arguments["init"]:
         return app.init()
     if arguments["drop"]:
-        return app.drop()
+        return app.drop(arguments)
 
     elif arguments["ls"]:
         return app.ls(arguments)
@@ -711,7 +717,6 @@ def main():
 
 
 if __name__ == "__main__":
-    print("here")
     main()
 
 
