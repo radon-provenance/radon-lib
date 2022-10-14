@@ -112,15 +112,13 @@ def test_tables():
     
     # list of tables that has to be created
     ls_tables = {'data_object', 'group', 'notification', 
-                 'tree_node', 'user'}
+                 'tree_node', 'user', 'config'}
     initialise()
     create_tables()
     cluster = connection.get_cluster()
     created_tables = set(cluster.metadata.keyspaces[TEST_KEYSPACE].tables.keys())
     assert created_tables.difference(ls_tables)==set()
     destroy()
-
-
 
 
 

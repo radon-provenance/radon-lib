@@ -14,10 +14,12 @@
 
 
 from dse.cqlengine import connection
+from dse import InvalidRequest
 
 import radon
 from radon.model import (
-    Collection
+    Collection,
+    Resource
 )
 from radon.util import (
     merge
@@ -29,31 +31,35 @@ class Search(object):
 
 
     @classmethod
-    def search(cls, terms, user):
+    def search(cls, solr_query, user):
         """
         search
         """
-        termstrings = ",".join(terms)
-        query = """SELECT * FROM tree_node where solr_query='path:{}'""".format(
-            termstrings)
+        query = """SELECT * FROM tree_node where {}""".format(solr_query)
         cluster = connection.get_cluster()
         session = cluster.connect(radon.cfg.dse_keyspace)
-        rows = session.execute(query)
+        try:
+            rows = session.execute(query)
+        except InvalidRequest:
+            print("invalid")
+            return [] 
+        
         
         results = []
         for node_row in rows:
-            if not "is_object" in node_row:
-                break
-            
-                #c_dict['result_type'] = 'Resource'
-                
-            if node_row.get("is_object") == False:
+            if node_row.get("is_object") == True:
+                path = merge(node_row.get("container", '/'),
+                             node_row.get("name", '/'))
+                resc = Resource.find(path)
+                r_dict = resc.to_dict(user)
+                r_dict['result_type'] = 'Resource'
+                results.append(r_dict)
+            else:
                 path = merge(node_row.get("container", '/'),
                              node_row.get("name", '/'))
                 coll = Collection.find(path)
                 c_dict = coll.to_dict(user)
                 c_dict['result_type'] = 'Collection'
-                
                 results.append(c_dict)
 
         return results

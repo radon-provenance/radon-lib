@@ -163,7 +163,8 @@ class Resource(ABC):
             name=name,
             user_meta=user_meta,
             sys_meta=sys_meta,
-            object_url=url
+            object_url=url,
+            is_object=True,
         )
         
         if not creator:

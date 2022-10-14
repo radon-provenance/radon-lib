@@ -197,17 +197,19 @@ def test_cli_command_rmgroup(mock_command):
 
 def test_commands(mocker):
     # Remove the existing user folder for the session
-    shutil.rmtree(os.path.expanduser("~/.radon"))
+    if os.path.exists("~/.radon"):
+        shutil.rmtree(os.path.expanduser("~/.radon"))
     
     
     #####################
     ## Create Database ##
     #####################
     
-    radon.cfg.dse_keyspace = "Temp_Radon"
+    radon.cfg.dse_keyspace = "temp_radon"
     
     with ArgvContext('radmin', 'init'):
         radon.cli.main()
+    
     
     
     ###########
@@ -218,6 +220,7 @@ def test_commands(mocker):
     # modify users afterward
     mocker.patch('radon.cli.input', return_value="test")
     mocker.patch('radon.cli.getpass', return_value="test")
+    
     
     ## Create 1st user, admin user
     with ArgvContext('radmin', 'mkuser', 'user1'):
@@ -232,7 +235,7 @@ def test_commands(mocker):
         radon.cli.main()
     with ArgvContext('radmin', 'moduser', 'user1', 'ldap', 'n'):
         radon.cli.main()
-
+    
     ## Create 2nd user, non admin user
     with ArgvContext('radmin', 'mkuser', 'user2'):
         radon.cli.main()
@@ -290,8 +293,7 @@ def test_commands(mocker):
     # List unknown user
     with ArgvContext('radmin', 'lu', 'unk_usr'):
         radon.cli.main()
-    
-    
+        
     ############
     ## Groups ##
     ############
@@ -299,7 +301,7 @@ def test_commands(mocker):
     ## Create 1st group
     with ArgvContext('radmin', 'mkgroup', 'grp1'):
         radon.cli.main()
-        
+    
     ## Group already exists
     with ArgvContext('radmin', 'mkgroup', 'grp1'):
         radon.cli.main()
@@ -350,8 +352,8 @@ def test_commands(mocker):
         radon.cli.main()
     with ArgvContext('radmin', 'mkdir', 'test/test'):
         radon.cli.main()
-
-
+    
+    
     ################
     ## Change dir ##
     ################
@@ -362,8 +364,8 @@ def test_commands(mocker):
         radon.cli.main()
     with ArgvContext('radmin', 'cd', 'test1'):
         radon.cli.main()
-
-
+    
+    
     #########
     ## Put ##
     #########
@@ -371,7 +373,7 @@ def test_commands(mocker):
     tmpfilepath = os.path.join(tempfile.gettempdir(), "testfile")
     with open(tmpfilepath, "w") as f:
         f.write("Delete the file after the test")
-
+    
     # Put a file without specifying the name
     with ArgvContext('radmin', 'put', tmpfilepath):
         radon.cli.main()
@@ -394,8 +396,8 @@ def test_commands(mocker):
     # Put a reference
     with ArgvContext('radmin', 'put', "--ref", "http://www.google.fr", 'test_ref.txt'):
         radon.cli.main()
-
-
+    
+    
     #########
     ## Get ##
     #########
@@ -434,8 +436,8 @@ def test_commands(mocker):
         radon.cli.main()
     
     os.remove("test.txt")
-
-
+    
+    
     #########
     ## Ls ##
     #########
@@ -462,7 +464,7 @@ def test_commands(mocker):
     with ArgvContext('radmin', "ls", "-a", "/test/"):
         radon.cli.main()
     
-
+    
     ##################
     ## Remove files ##
     ##################
@@ -498,7 +500,7 @@ def test_commands(mocker):
         radon.cli.main()
     with ArgvContext('radmin', 'rfg', 'grp1', 'user1', 'user2'):
         radon.cli.main()
-
+    
     ###################
     ## Remove groups ##
     ###################
@@ -513,8 +515,8 @@ def test_commands(mocker):
     # Group doesn't exist
     with ArgvContext('radmin', 'rmgroup', 'grp3'):
         radon.cli.main()
-
-
+    
+    
     ##################
     ## Remove users ##
     ##################
@@ -540,20 +542,13 @@ def test_commands(mocker):
         radon.cli.main()
     
 
-
     ####################
     ## Clean Database ##
     ####################
     
     # Simulate an input of a 'y' to drop the keyspace automatically
     mocker.patch('radon.cli.input', return_value="y")
-       
+    
     with ArgvContext('radmin', 'drop'):
         radon.cli.main()
-
-
-
-
-
-
 

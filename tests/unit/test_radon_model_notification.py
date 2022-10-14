@@ -50,7 +50,7 @@ def teardown_module(module):
 
 def test_publish():
     cfg.dse_keyspace = TEST_KEYSPACE
-    cfg.mqtt_host = "172.17.0.5"
+    cfg.mqtt_host = "172.17.0.2"
     connect()
     uuid = default_uuid()
     notif = Notification.new(

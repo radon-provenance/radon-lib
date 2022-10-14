@@ -24,12 +24,14 @@ from dse.cluster import (
     EXEC_PROFILE_DEFAULT,
     NoHostAvailable
 )
+from dse import InvalidRequest
 from dse.policies import WhiteListRoundRobinPolicy
 import time
-#
+
 from radon import cfg
 from radon.model import (
     Collection,
+    Config,
     DataObject,
     Group,
     Notification,
@@ -40,7 +42,41 @@ from radon.model.errors import (
     GroupConflictError,
     UserConflictError,
 )
+from radon.model.config import (
+    MODULE_SEARCH,
+    FIELD_TYPE_TEXT,
+    OPTION_FIELD_META
+)
 
+def add_search_field(name, type):
+    """
+    Add a search field for DSE Search
+        
+    :param name: The name of the field
+    :type name: str
+    :param type: The type of the field 
+    :type name: str
+    
+    :return: True if the field has been added
+    :rtype: bool
+    """
+    Config.create(module = MODULE_SEARCH,
+                  option = OPTION_FIELD_META,
+                  key = name,
+                  value = type)
+    cluster = connection.get_cluster()
+    session = cluster.connect(cfg.dse_keyspace)
+    
+    query = """ALTER SEARCH INDEX SCHEMA ON {0}.tree_node ADD fields.field[@indexed='true', @name='{1}', @type='{2}'];""".format(
+        cfg.dse_keyspace, name, type)
+    try:
+        rows = session.execute(query)
+    except InvalidRequest:
+        return False    
+    
+    rebuild_index()
+    return True
+    
 
 def connect():
     """Connect to a Cassandra cluster.
@@ -83,6 +119,12 @@ def connect():
     return False
 
 
+def create_default_fields():
+    """Create default fields for Solr search"""
+    for name, field_type in cfg.default_fields:
+        add_search_field(name, field_type)
+
+
 def create_default_users():
     """Create some users and groups
     
@@ -120,15 +162,107 @@ def create_tables():
     tables = (
         DataObject,
         Group,
-#         IDSearch,
         Notification,
-#         SearchIndex,
         User,
         TreeNode,
+        Config
     )
+        
     for table in tables:
         cfg.logger.info('Syncing table "{0}"'.format(table.__name__))
         sync_table(table)
+    
+    cluster = connection.get_cluster()
+    
+    session = cluster.connect(cfg.dse_keyspace)
+    # Create default search indexes
+    query = """CREATE SEARCH INDEX ON {0}.tree_node WITH COLUMNS container, name, user_meta;""".format(cfg.dse_keyspace)
+    try:
+        rows = session.execute(query)
+    except InvalidRequest:  # Search Index already exists
+        pass
+    
+    
+    # # Add a field type for the path index (tokenize, lowercase and stem)
+    # # query = """ALTER SEARCH INDEX SCHEMA ON radon.tree_node ADD types.fieldType[@name='pathTextField', @class='org.apache.solr.schema.TextField']  
+    # #            WITH $$ { "analyzer": {"tokenizer": {"class": "solr.StandardTokenizerFactory"},
+    # #                      "filter": [ {"class": "solr.LowerCaseFilterFactory"}, {"class": "solr.PorterStemFilterFactory"} ] }} $$;"""
+    #
+    query = """ALTER SEARCH INDEX SCHEMA ON {0}.tree_node ADD types.fieldType[@name='pathTextField', @class='org.apache.solr.schema.TextField']  
+               WITH $$ {{ "analyzer": {{"tokenizer": {{"class": "solr.PathHierarchyTokenizerFactory"}},
+                         "filter": [ {{"class": "solr.LowerCaseFilterFactory"}} ] }}}} $$;""".format(cfg.dse_keyspace)
+    try:
+        rows = session.execute(query)
+    except InvalidRequest:  # Field Type already exists
+        pass
+    
+    query = """ALTER SEARCH INDEX SCHEMA ON {0}.tree_node ADD types.fieldType[@name='TextLine', @class='org.apache.solr.schema.TextField']  
+               WITH $$ {{ "analyzer": {{"tokenizer": {{"class": "solr.StandardTokenizerFactory"}},
+                         "filter": [ {{"class": "solr.LowerCaseFilterFactory"}} ] }}}} $$;""".format(cfg.dse_keyspace)
+    try:
+        rows = session.execute(query)
+    except InvalidRequest:  # Field Type already exists
+        pass
+    
+    
+    # Create a new field for path (concatenate container + name)
+    query = """ALTER SEARCH INDEX SCHEMA ON {0}.tree_node ADD fields.field[@name='path', @type='pathTextField'];""".format(cfg.dse_keyspace)
+    try:
+        rows = session.execute(query)
+    except InvalidRequest:  # Field already exists
+        pass
+    
+    query = """ALTER SEARCH INDEX SCHEMA ON {0}.tree_node ADD copyField[@source='container', @dest='path'];""".format(cfg.dse_keyspace)
+    try:
+        rows = session.execute(query)
+    except InvalidRequest:  # Resource Element already exists
+        pass
+    
+    query = """ALTER SEARCH INDEX SCHEMA ON {0}.tree_node ADD copyField[@source='name', @dest='path'];""".format(cfg.dse_keyspace)
+    try:
+        rows = session.execute(query)
+    except InvalidRequest:  # Resource Element already exists
+        pass
+    
+    rebuild_index()
+    
+
+def rebuild_index(): 
+    """Reload the search index schema and rebuild the search index"""
+    cluster = connection.get_cluster()
+    session = cluster.connect(cfg.dse_keyspace)
+    query = """RELOAD SEARCH INDEX ON {0}.tree_node;""".format(cfg.dse_keyspace)
+    rows = session.execute(query)
+    
+    query = """REBUILD SEARCH INDEX ON {0}.tree_node;""".format(cfg.dse_keyspace)
+    rows = session.execute(query)
+    
+
+def rm_search_field(name):
+    """
+    Add a search field for DSE Search
+        
+    :param name: The name of the field
+    :type name: str
+    :param type: The type of the field 
+    :type name: str
+    """ 
+    c = Config.objects.filter(module = MODULE_SEARCH,
+                              option = OPTION_FIELD_META,
+                              key = name)
+    c.delete()
+    cluster = connection.get_cluster()
+    session = cluster.connect(cfg.dse_keyspace)
+    
+    query = """ALTER SEARCH INDEX SCHEMA ON {0}.tree_node DROP field {1};""".format(
+                    cfg.dse_keyspace,
+                    name)
+    try:
+        rows = session.execute(query)
+    except InvalidRequest:
+        return
+    
+    rebuild_index()
 
 
 def destroy():

@@ -15,7 +15,15 @@
 
 import os
 
+
+from dse.cqlengine import columns
+from dse.cqlengine.models import connection, Model
+from dse.query import SimpleStatement
+
+
 from radon.log import init_logger
+import radon
+
 
 
 ENV_DSE_HOST_VAR = "DSE_HOST"
@@ -67,7 +75,45 @@ AUTH_LDAP_SERVER_URI = os.getenv("AUTH_LDAP_SERVER_URI", None)
 AUTH_LDAP_USER_DN_TEMPLATE = os.getenv("AUTH_LDAP_USER_DN_TEMPLATE", None)
 
 
-class Config(object):
+# For Config stored in Cassandra
+
+MODULE_DSE = "dse_module"
+MODULE_SEARCH = "search_module"
+MODULE_META = "meta_module"
+
+OPTION_FIELD_META = "field_meta"
+
+FIELD_TYPE_TEXT = "TextLine"
+FIELD_TYPE_STR = "StrField"
+FIELD_TYPE_INT = "TrieIntField"
+
+FIELD_TYPE_INTERFACE = [
+    (FIELD_TYPE_TEXT, FIELD_TYPE_TEXT),
+    (FIELD_TYPE_STR, FIELD_TYPE_STR),
+    (FIELD_TYPE_INT, FIELD_TYPE_INT),
+]
+
+
+DEFAULT_FIELDS = [
+    ("dc_contributor", FIELD_TYPE_TEXT),
+    ("dc_coverage", FIELD_TYPE_TEXT),
+    ("dc_creator", FIELD_TYPE_TEXT),
+    ("dc_date", FIELD_TYPE_TEXT),
+    ("dc_description", FIELD_TYPE_TEXT),
+    ("dc_format", FIELD_TYPE_TEXT), 
+    ("dc_identifier", FIELD_TYPE_TEXT),
+    ("dc_language", FIELD_TYPE_TEXT),
+    ("dc_publisher", FIELD_TYPE_TEXT),
+    ("dc_relation", FIELD_TYPE_TEXT),
+    ("dc_rights", FIELD_TYPE_TEXT), 
+    ("dc_source", FIELD_TYPE_TEXT),
+    ("dc_subject", FIELD_TYPE_TEXT),  
+    ("dc_title", FIELD_TYPE_TEXT),   
+    ("dc_type", FIELD_TYPE_TEXT),
+]
+
+
+class LocalConfig(object):
     """Store the configuration options for radon
      - Environment variables to set:
         - DSE_HOST: space separated list of IP/Host address (default: ('127.0.0.1',))
@@ -169,6 +215,8 @@ class Config(object):
         self.default_groups = DEFAULT_GROUPS
 
         self.default_users = DEFAULT_USERS
+        self.default_fields = DEFAULT_FIELDS
+        self.field_type_interface = FIELD_TYPE_INTERFACE
 
         self.chunk_size = CHUNK_SIZE
         self.compress_do = COMPRESS_DO
@@ -202,6 +250,57 @@ class Config(object):
         return str(self.to_dict())
 
 
+
+
+
+class Config(Model):
+    """Config Model
+    
+    This is used to store dynamic configuration, options are lists of key/value 
+    pairs. One row in the table is one option value so lists will be split in
+    multiple rows.
+    This is more general as it can deal with simple or complex options. For
+    simple options we can store the value directly in the key or value column
+    (as soon as we are consistent), there will be only one row returned when we
+    look for the option.
+    
+    Example:
+    
+    |--------|----------|----------|----------|
+    | module |  option  |   key    |   value  |
+    |--------|----------|----------|----------|
+    | search |   field  |  desc    | TextLine |
+    | search |   field  |  author  | TextLine |
+    |   dse  | keyspace | keyspace |  radon   |
+    | ...                                     |
+    |--------|----------|----------|----------|
+    
+    :param module: The name of the radon module that has to be configured
+    :type module: :class:`columns.Text`
+    :param option: The name of the option
+    :type option: :class:`columns.Text`
+    :param key: A specific key for the option 
+    :type key: :class:`columns.Text`
+    :param value: The value associated to the specific key of the option 
+    :type value: :class:`columns.Text`    
+    
+    """
+
+    module = columns.Text(partition_key=True)
+    option = columns.Text(primary_key=True)
+    key = columns.Text(primary_key=True)
+    value = columns.Text()
+    
+    
+    @classmethod
+    def get_search_indexes(self):  
+        cfg_fields = Config.objects.filter(module=MODULE_SEARCH,
+                                           option=OPTION_FIELD_META)
+        list_index = []
+        for field in cfg_fields:
+            list_index.append((field.key, field.value))
+        return list_index
+   
 
 
 

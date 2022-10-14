@@ -18,7 +18,7 @@ import os
 import pytest
 
 from radon import cfg
-from radon import Config
+from radon import LocalConfig
 from radon.model.config import (
     DEFAULT_DSE_HOST,
     DEFAULT_DSE_KEYSPACE,
@@ -33,27 +33,27 @@ from radon.model.config import (
 def test_config():
     # Test DSE HOST VAR
     os.environ[ENV_DSE_HOST_VAR] = "192.168.56.100"
-    cfg = Config()
+    cfg = LocalConfig()
     assert cfg.dse_host == ["192.168.56.100"]
 
     os.environ[ENV_DSE_HOST_VAR] = "192.168.56.100 192.168.56.101"
-    cfg = Config()
+    cfg = LocalConfig()
     assert cfg.dse_host == ["192.168.56.100", "192.168.56.101"]
 
     del os.environ[ENV_DSE_HOST_VAR]
-    cfg = Config()
+    cfg = LocalConfig()
     assert cfg.dse_host == [DEFAULT_DSE_HOST,]
 
     # Test MQTT HOST VAR
     os.environ[ENV_MQTT_HOST_VAR] = "192.168.56.100"
-    cfg = Config()
+    cfg = LocalConfig()
     assert cfg.mqtt_host == "192.168.56.100"
 
     del os.environ[ENV_MQTT_HOST_VAR]
-    cfg = Config()
+    cfg = LocalConfig()
     assert cfg.mqtt_host == DEFAULT_MQTT_HOST
 
-    cfg = Config()
+    cfg = LocalConfig()
     assert cfg.dse_keyspace == DEFAULT_DSE_KEYSPACE
     assert cfg.dse_strategy == DEFAULT_DSE_STRATEGY
     assert cfg.dse_repl_factor == DEFAULT_DSE_REPL_FACTOR

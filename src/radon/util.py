@@ -252,7 +252,7 @@ def encrypt_password(plain):
      :return: a password hash
      :rtype: str
     """
-    return pbkdf2_sha256.encrypt(plain)
+    return pbkdf2_sha256.hash(plain)
 
 
 def guess_mimetype(filepath):
