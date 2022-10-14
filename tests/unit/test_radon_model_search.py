@@ -1,4 +1,4 @@
-# Copyright 2022
+# Copyright 2021
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,7 +34,6 @@ from radon.model import (
     DataObject,
     Group,
     Resource,
-    Search,
     TreeNode,
     User
 )
@@ -48,8 +47,12 @@ from radon.model.errors import(
 
 TEST_KEYSPACE = "test_keyspace"
 
+GRP1_NAME = uuid.uuid4().hex
+GRP2_NAME = uuid.uuid4().hex
+GRP3_NAME = uuid.uuid4().hex
 
-
+USR1_NAME = uuid.uuid4().hex
+USR2_NAME = uuid.uuid4().hex
 
 def setup_module():
     cfg.dse_keyspace = TEST_KEYSPACE
@@ -57,53 +60,50 @@ def setup_module():
     connect()
     create_tables()
     create_default_users()
-    create_root()    
+    create_root()
+
+    grp1 = Group.create(name=GRP1_NAME)
+    grp2 = Group.create(name=GRP2_NAME)
+    grp3 = Group.create(name=GRP3_NAME)
     
-    try:
-        u1 = User.create(name="user1", password="pwd", email="email", administrator=True)
-    except:
-        pass
-    try:
-        u2 = User.create(name="user2", password="pwd", email="email", administrator=False)
-    except:
-        pass
+    user_name = USR1_NAME
+    email = uuid.uuid4().hex
+    password = uuid.uuid4().hex
+    administrator = True
+    groups = [GRP1_NAME]
+    user1 = User.create(name=user_name,
+                        email=email,
+                        password=password, 
+                        administrator=administrator,
+                        groups=groups)
     
-    try:
-        coll = Collection.create("/", "1")
-        r = Resource.create("/1", "a")
-    except: # If collections or resources already exist
-        pass
-  
+    user_name = USR2_NAME
+    email = uuid.uuid4().hex
+    password = uuid.uuid4().hex
+    administrator = False
+    groups = [GRP1_NAME, GRP2_NAME]
+    user2 = User.create(name=user_name,
+                        email=email,
+                        password=password, 
+                        administrator=administrator,
+                        groups=groups)
 
 
 
 def teardown_module(module):
-    # Due to the time needed to index we may have to add waiting time before
-    # destroying things
-    #destroy()
+    destroy()
+
+
+def create_data_object():
+    myFactory = Faker()
+    content = myFactory.text()
+    do = DataObject.create(content.encode())
+    return do
+
+
+
+def test_put():
     pass
 
-
-
-def test_search():
-    # Search a collection
-    solr_query = """solr_query='path:"1"'"""
-    res = Search.search(solr_query, User.find("user1"))
-    assert len(res) == 1
-    
-    # Search a data object
-    solr_query = """solr_query='path:"a"'"""
-    res = Search.search(solr_query, User.find("user1"))
-    assert len(res) == 1
-    
-    # Search a collection
-    solr_query = """solr_query='path:"unknown"'"""
-    res = Search.search(solr_query, User.find("user1"))
-    assert len(res) == 0
-    
-    # Invalid query
-    solr_query = """solr_query='unknown:"unknown"'"""
-    res = Search.search(solr_query, User.find("user1"))
-    assert len(res) == 0
 
 

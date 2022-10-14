@@ -163,7 +163,7 @@ class RadonApplication():
         if not args["-f"]:
             confirm = input("Are you sure you want to continue ? [y/N] ")
         
-            if confirm.lower() not in ["true", "y", "yes"]:
+            if not confirm.lower() in ["true", "y", "yes"]:
                 return
         
         destroy()

@@ -36,12 +36,12 @@ class Search(object):
         search
         """
         query = """SELECT * FROM tree_node where {}""".format(solr_query)
+        
         cluster = connection.get_cluster()
         session = cluster.connect(radon.cfg.dse_keyspace)
         try:
             rows = session.execute(query)
         except InvalidRequest:
-            print("invalid")
             return [] 
         
         
@@ -63,6 +63,5 @@ class Search(object):
                 results.append(c_dict)
 
         return results
-
 
 
