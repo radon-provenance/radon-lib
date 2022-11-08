@@ -1,5 +1,5 @@
 # Dockerfile
-FROM python:3.6
+FROM python:3.11
 
 # Hostnames for dse and mqtt servers
 ARG DSE_HOST
