@@ -22,6 +22,7 @@ from radon.model import Notification
 from radon.model.errors import GroupConflictError
 from radon.util import (
     datetime_serializer,
+    default_time,
     default_uuid
 )
 
@@ -37,10 +38,11 @@ class Group(Model):
     :param name: The group name, used as the primary key
     :type name: :class:`columns.Text`"""
 
-    uuid = columns.Text(default=default_uuid)
     name = columns.Text(primary_key=True, required=True)
+    uuid = columns.Text(default=default_uuid)
+    create_ts = columns.TimeUUID(default=default_time)
 
-    def add_user(self, name, username=None):
+    def add_user(self, name, sender=None):
         """
         Add a user to a group
         Return 3 lists:
@@ -50,16 +52,16 @@ class Group(Model):
 
         :param name: User name to add to the group
         :type name: str
-        :param username: the name of the user who made the action
-        :type username: str, optional
+        :param sender: the name of the user who made the action
+        :type sender: str, optional
         
         :return: 3 lists to summarize what happened
         :rtype: Tuple[List[str],List[str],List[str]]
         """
-        return self.add_users([name], username)
+        return self.add_users([name], sender)
 
 
-    def add_users(self, ls_users, username=None):
+    def add_users(self, ls_users, sender=None):
         """
         Add a list of users to a group
         Return 3 lists:
@@ -69,8 +71,8 @@ class Group(Model):
 
         :param ls_users: List of usernames to add to the group
         :type ls_users: List[str]
-        :param username: the name of the user who made the action
-        :type username: str, optional
+        :param sender: the name of the user who made the action
+        :type sender: str, optional
         
         :return: 3 lists to summarize what happened
         :rtype: Tuple[List[str],List[str],List[str]]
@@ -84,7 +86,7 @@ class Group(Model):
             user = User.find(name)
             if user:
                 if self.name not in user.get_groups():
-                    user.add_group(self.name, username)
+                    user.add_group(self.name, sender)
                     added.append(name)
                 else:
                     already_there.append(name)
@@ -101,47 +103,56 @@ class Group(Model):
         
         :param name: the name of the group
         :type name: str
-        :param username: the name of the user who made the action
-        :type username: str, optional
+        :param sender: the name of the user who made the action
+        :type sender: str, optional
         
         :return: The new created group
         :rtype: :class:`radon.model.Group`
         """
         kwargs["name"] = kwargs["name"].strip()
-        if "username" in kwargs:
-            username = kwargs["username"]
-            del kwargs["username"]
+        if "sender" in kwargs:
+            sender = kwargs["sender"]
+            del kwargs["sender"]
         else:
-            username = radon.cfg.sys_lib_user
+            sender = radon.cfg.sys_lib_user
         # Make sure name id not in use.
-        existing = cls.objects.filter(name=kwargs["name"]).first()
-        if existing:
-            raise GroupConflictError(kwargs["name"])
-        grp = super(Group, cls).create(**kwargs)
-        state = grp.mqtt_get_state()
-        payload = grp.mqtt_payload({}, state)
-        Notification.create_group(username, grp.name, payload)
-        return grp
+        if cls.objects.filter(name=kwargs["name"]).count():
+            Notification.create_fail_group(sender, 
+                                           kwargs["name"],
+                                           "Group already exists")
+            return None
+        
+        group = super(Group, cls).create(**kwargs)
+        
+        Notification.create_success_group(sender, group)
+        return group
 
 
-    def delete(self, username=None):
+    def delete(self, sender=None):
         """
         Delete the group in the database. (Can be improved, we need to remove 
         the group for all the users)
         
-        :param username: the name of the user who made the action
-        :type username: str, optional
+        :param sender: the name of the user who made the action
+        :type sender: str, optional
         """
         from radon.model import User
  
-        state = self.mqtt_get_state()
+        payload = {
+            "obj": self.mqtt_get_state(),
+            'meta' : {
+                "sender": sender
+            }
+        }
+
         for u in User.objects.all():
             if self.name in u.groups:
                 u.groups.remove(self.name)
                 u.save()
         super(Group, self).delete()
-        payload = self.mqtt_payload(state, {})
-        Notification.delete_group(username, self.name, payload)
+        
+        Notification.delete_success_group(payload)
+
  
     @classmethod
     def find(cls, name):
@@ -172,7 +183,7 @@ class Group(Model):
         return cls.objects.filter(name__in=namelist).all()
 
 
-    def get_usernames(self):
+    def get_members(self):
         """
         Get a list of usernames of the group
         
@@ -186,7 +197,7 @@ class Group(Model):
         from radon.model import User
  
         return [
-            u.name for u in User.objects.all() if u.active and self.name in u.groups
+            u.login for u in User.objects.all() if u.active and self.name in u.groups
         ]
 
 
@@ -200,7 +211,7 @@ class Group(Model):
         payload = dict()
         payload["uuid"] = self.uuid
         payload["name"] = self.name
-        payload["members"] = self.get_usernames()
+        payload["members"] = self.get_members()
         return payload
 
 
@@ -226,7 +237,7 @@ class Group(Model):
         return json.dumps(payload, default=datetime_serializer)
 
 
-    def rm_user(self, name, username=False):
+    def rm_user(self, name, sender=False):
         """
         Remove a user from the group.
         Return 3 lists:
@@ -236,16 +247,16 @@ class Group(Model):
         
         :param name: The name of the user to remove
         :type name: str
-        :param username: the name of the user who made the action
-        :type username: str, optional
+        :param sender: the name of the user who made the action
+        :type sender: str, optional
         
         :return: 3 lists to summarize what happened
         :rtype: Tuple[List[str],List[str],List[str]]
         """
-        return self.rm_users([name], username)
+        return self.rm_users([name], sender)
 
 
-    def rm_users(self, ls_users, username=False):
+    def rm_users(self, ls_users, sender=False):
         """
         Remove a list of users from the group.
         Return 3 lists:
@@ -255,8 +266,8 @@ class Group(Model):
         
         :param ls_users: The lists of user names to remove
         :type ls_users: List[str]
-        :param username: the name of the user who made the action
-        :type username: str, optional
+        :param sender: the name of the user who made the action
+        :type sender: str, optional
         
         :return: 3 lists to summarize what happened
         :rtype: Tuple[List[str],List[str],List[str]]
@@ -270,7 +281,7 @@ class Group(Model):
             user = User.find(name)
             if user:
                 if self.name in user.get_groups():
-                    user.rm_group(self.name, username)
+                    user.rm_group(self.name, sender)
                     removed.append(name)
                 else:
                     not_there.append(name)
@@ -288,30 +299,53 @@ class Group(Model):
         """
         return {"uuid": self.uuid,
                 "name": self.name,
-                "members": self.get_usernames()}
+                "members": self.get_members()}
 
 
     def update(self, **kwargs):
         """
         Update a group. 
         
-        :param username: the name of the user who made the action
-        :type username: str, optional
+        :param sender: the name of the user who made the action
+        :type sender: str, optional
 
         :return: The modified group
         :rtype: :class:`radon.model.Group`
         """
         pre_state = self.mqtt_get_state()
-        if "username" in kwargs:
-            username = kwargs["username"]
-            del kwargs["username"]
+        
+        if "sender" in kwargs:
+            sender = kwargs['sender']
+            del kwargs['sender']
         else:
-            username = None
-        super(Group, self).update(**kwargs)
+            sender = radon.cfg.sys_lib_user
+            
+        if "members" in kwargs:
+            members = kwargs['members']
+            del kwargs['members']
+            new_members_set = set(members)
+            old_members_set = set(self.get_members())
+            
+            to_add = new_members_set.difference(old_members_set)
+            to_rm = old_members_set.difference(new_members_set)
+            self.add_users(list(to_add), sender)
+            self.rm_users(list(to_rm), sender)
+        
+        # No field to update directly for the moment
+        # super(Group, self).update(**kwargs)
+        
         group = Group.find(self.name)
+        
         post_state = group.mqtt_get_state()
-        payload = group.mqtt_payload(pre_state, post_state)
-        Notification.update_group(username, group.name, payload)
+        if (pre_state != post_state):
+            payload = {
+                "pre" : pre_state,
+                "post": post_state,
+                "meta": {
+                    "sender": sender
+                    }
+            }
+            Notification.update_success_group(payload)
         return self
 
 

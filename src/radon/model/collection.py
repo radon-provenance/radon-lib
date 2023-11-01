@@ -19,6 +19,7 @@ import json
 
 import radon
 from radon.model import (
+    Notification,
     TreeNode,
 )
 from radon.model.acl import (
@@ -89,7 +90,8 @@ class Collection(object):
         self.uuid = self.node.uuid
 
     @classmethod
-    def create(cls, container, name, metadata=None, creator=None):
+    def create(cls, container, name, metadata=None, creator=None, 
+               read_access=None, write_access=None):
         """
         Create a new collection
         
@@ -118,13 +120,22 @@ class Collection(object):
         # Check if parent collection exists
         parent = Collection.find(container)
         if parent is None:
-            raise NoSuchCollectionError(container)
+            Notification.create_fail_collection(creator, 
+                                                path,
+                                                "Parent container doesn't exist")
+            return None
         resource = Resource.find(merge(container, name))
         if resource is not None:
-            raise ResourceConflictError(container)
+            Notification.create_fail_collection(creator, 
+                                                path,
+                                                "Conflict with a resource")
+            return None
         collection = Collection.find(path)
         if collection is not None:
-            raise CollectionConflictError(container)
+            Notification.create_fail_collection(creator, 
+                                                path,
+                                                "Conflict with a collection")
+            return None
 
         now_date = now()
         if not metadata:
@@ -146,9 +157,12 @@ class Collection(object):
             creator = radon.cfg.sys_lib_user
         
         new = cls(coll_node)
-        state = new.mqtt_get_state()
-        payload = new.mqtt_payload({}, state)
-        Notification.create_collection(creator, path, payload)
+        
+        if read_access or write_access:
+            new.create_acl_list(read_access, write_access)
+                
+        
+        Notification.create_success_collection(creator, new)
         return new
 
 
@@ -174,28 +188,25 @@ class Collection(object):
         )
         root_node.add_default_acl()
         new = cls(root_node)
-        state = new.mqtt_get_state()
-        payload = new.mqtt_payload({}, state)
-        Notification.create_collection(radon.cfg.sys_lib_user, "/", payload)
         return new
 
 
     @classmethod
-    def delete_all(cls, path, username=None):
+    def delete_all(cls, path, sender=None):
         """
         Delete recursively all sub-collections and all resources contained
         in a collection at 'path'
         
         :param path: The full path in the hierarchy
         :type path: str
-        :param username: The name of the user who deleted the collection
-        :type username: str, optional
+        :param sender: The name of the user who deleted the collection
+        :type sender: str, optional
         """ 
         parent = cls.find(path)
         if not parent:
             return
         else:
-            parent.delete(username)
+            parent.delete(sender)
 
 
     @classmethod
@@ -288,19 +299,29 @@ class Collection(object):
         return self.node.sys_meta.get(radon.cfg.meta_modify_ts)
 
 
-    def delete(self, username=None):
+    def delete(self, **kwargs):
         """
         Delete a collection and the associated row in the tree_node table
         
-        :param username: The name of the user who deleted the collection
-        :type username: str, optional
+        :param sender: The name of the user who deleted the collection
+        :type sender: str, optional
         """
         from radon.model import Resource
-        if not username:
-            username = radon.cfg.sys_lib_user
+        if "sender" in kwargs:
+            sender = kwargs['sender']
+            del kwargs['sender']
+        else:
+            sender = radon.cfg.sys_lib_user
  
         if self.is_root:
             return
+            
+        payload = {
+            "obj": self.mqtt_get_state(),
+            'meta' : {
+                "sender": sender
+            }
+        }
 
         # We don't need the suffixes for the resources, otherwise we won't 
         # find them
@@ -319,12 +340,8 @@ class Collection(object):
         session.set_keyspace(keyspace)
         query = SimpleStatement("""DELETE FROM tree_node WHERE container=%s and name=%s""")
         session.execute(query, (self.container, self.name, ))
-
-        from radon.model import Notification
-        state = self.mqtt_get_state()
-        payload = self.mqtt_payload(state, {})
-        Notification.delete_collection(username, self.path, payload)
-#         self.reset()
+        
+        Notification.delete_success_collection(payload)
 
 
     def get_acl_dict(self):
@@ -434,7 +451,7 @@ class Collection(object):
             elif node.name.endswith("/"):
                 subcoll_name = node.name
                 # Do not add several versions of the same object (not efficient)
-                if not subcoll_name in child_container:
+                if subcoll_name not in child_container:
                     child_container.append(subcoll_name)
             else:
                 do_name = node.name
@@ -445,7 +462,7 @@ class Collection(object):
                     else:
                         do_name = "{}#".format(do_name)
                 # Do not add several versions of the same object (not efficient)
-                if not do_name in child_dataobject:
+                if do_name not in child_dataobject:
                     child_dataobject.append(do_name)
         return (child_container, child_dataobject)
 
@@ -457,7 +474,7 @@ class Collection(object):
         :return: the number of resources
         :rtype: int
         """
-        child_container, child_dataobject = self.get_child()
+        _, child_dataobject = self.get_child()
         return len(child_dataobject)
 
 
@@ -585,7 +602,6 @@ class Collection(object):
             "created": self.get_create_ts(),
             "user_meta": self.get_list_user_meta(),
             "sys_meta": self.get_list_sys_meta(),
-            
         }
         if user:
             data["can_read"] = self.user_can(user, "read")
@@ -600,8 +616,8 @@ class Collection(object):
         Update a collection. We intercept the call to encode the metadata if we
         modify it. Metadata passed in this method is user meta.
         
-        :param username: the name of the user who made the action
-        :type username: str, optional
+        :param sender: the name of the user who made the action
+        :type sender: str, optional
         :param metadata: The plain password to encrypt
         :type metadata: dict
         """
@@ -612,24 +628,47 @@ class Collection(object):
         if "metadata" in kwargs:
             # Transform the metadata in cdmi format to the format stored in
             # Cassandra
-            #kwargs["metadata"][radon.cfg.meta_modify_ts] = now_date
             kwargs["user_meta"] = meta_cdmi_to_cassandra(kwargs["metadata"])
             del kwargs["metadata"]
         
         sys_meta = self.node.sys_meta
         sys_meta[radon.cfg.meta_modify_ts] = encode_meta(now_date)
         kwargs["sys_meta"] = sys_meta
-        if "username" in kwargs:
-            username = kwargs["username"]
-            del kwargs["username"]
+        if "sender" in kwargs:
+            sender = kwargs["sender"]
+            del kwargs["sender"]
         else:
-            username = None
+            sender = None
+        
+        if "read_access" in kwargs:
+            read_access = kwargs["read_access"]
+            del kwargs["read_access"]
+        else:
+            read_access = []
+        if "write_access" in kwargs:
+            write_access = kwargs["write_access"]
+            del kwargs["write_access"]
+        else:
+            write_access = []
+
         self.node.update(**kwargs)
+        
+        if read_access or write_access:
+            self.update_acl_list(read_access, write_access)
+        
         coll = Collection.find(self.path)
         post_state = coll.mqtt_get_state()
-        payload = coll.mqtt_payload(pre_state, post_state)
-        Notification.update_collection(username, coll.path, payload)
-#         coll.index()
+        
+        if (pre_state != post_state):
+            payload = {
+                "pre" : pre_state,
+                "post": post_state,
+                "meta": {
+                    "sender": sender
+                    }
+            }
+            Notification.update_success_collection(payload)
+        return self
 
 
     def update_acl_cdmi(self, cdmi_acl):
@@ -637,6 +676,18 @@ class Collection(object):
         of ACE dictionary), existing ACL are replaced"""
         cql_string = acl_cdmi_to_cql(cdmi_acl)
         self.node.update_acl(cql_string)
+
+
+    def update_acl_list(self, read_access, write_access):
+        """
+        Update ACL from lists of group uuids
+        
+        :param read_access: A list of group names which have read access
+        :type read_access: List[str]
+        :param write_access: A list of group names which have write access
+        :type write_access: List[str]
+        """
+        self.node.update_acl_list(read_access, write_access)
 
 
     def user_can(self, user, action):

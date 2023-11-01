@@ -98,21 +98,21 @@ def test_add_user():
     # g3 = [u4]
     
     g1.add_user(u1.name)
-    assert u1.name in g1.get_usernames()
+    assert u1.name in g1.get_members()
     # g1 = [u1]
     
     added, not_added, already_there = g2.add_users([u1.name, u2.name, u4.name, "unknown_user"])
     # g2 = [u1, u2, u4]
-    assert u1.name in g2.get_usernames()
-    assert u2.name in g2.get_usernames()
-    assert u4.name in g2.get_usernames()    # From create
+    assert u1.name in g2.get_members()
+    assert u2.name in g2.get_members()
+    assert u4.name in g2.get_members()    # From create
     assert added == [u1.name, u2.name]
     assert not_added == ["unknown_user"]
     assert already_there == [u4.name]
     
     g2.rm_user(u4.name)
     # g2 = [u1, u2]
-    assert not u4.name in g2.get_usernames()
+    assert not u4.name in g2.get_members()
 
     removed, not_there, not_exist = g2.rm_users([u1.name, u2.name, u4.name, "unknown_user"])
     assert removed == [u1.name, u2.name]

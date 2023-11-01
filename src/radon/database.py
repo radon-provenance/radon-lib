@@ -70,9 +70,9 @@ def add_search_field(name, type):
     query = """ALTER SEARCH INDEX SCHEMA ON {0}.tree_node ADD fields.field[@indexed='true', @name='{1}', @type='{2}'];""".format(
         cfg.dse_keyspace, name, type)
     try:
-        rows = session.execute(query)
+        session.execute(query)
     except InvalidRequest:
-        return False    
+        return False
     
     rebuild_index()
     return True
@@ -126,7 +126,7 @@ def create_default_fields():
 
 
 def create_default_users():
-    """Create some users and groups
+    """Create some users and groups.
     
     Users and groups are defined in DEFAULT_GROUPS and DEFAULT_USERS in the 
     :mod:`radon.model.config` module, .
@@ -137,15 +137,21 @@ def create_default_users():
             Group.create(name=name)
         except GroupConflictError:
             pass
-    for name, email, pwd, is_admin, groups in cfg.default_users:
-        try:
-            User.create(name=name,
-                        email=email,
-                        password=pwd,
-                        administrator=is_admin,
-                        groups=groups)
-        except UserConflictError:
-            pass
+    for login, fullname, email, pwd, is_admin, groups in cfg.default_users:
+        payload = {
+                "obj": { 
+                    "login": login,
+                    "password": pwd,
+                    "fullname": fullname,
+                    "email": email,
+                    "administrator": is_admin,
+                    "groups": groups
+                },
+                "meta": {
+                    "sender": "radon-lib"
+                }
+            }
+        Notification.create_request_user(payload)
 
 
 def create_root():
@@ -178,7 +184,7 @@ def create_tables():
     # Create default search indexes
     query = """CREATE SEARCH INDEX ON {0}.tree_node WITH COLUMNS container, name, user_meta;""".format(cfg.dse_keyspace)
     try:
-        rows = session.execute(query)
+        session.execute(query)
     except InvalidRequest:  # Search Index already exists
         pass
     
@@ -192,7 +198,7 @@ def create_tables():
                WITH $$ {{ "analyzer": {{"tokenizer": {{"class": "solr.PathHierarchyTokenizerFactory"}},
                          "filter": [ {{"class": "solr.LowerCaseFilterFactory"}} ] }}}} $$;""".format(cfg.dse_keyspace)
     try:
-        rows = session.execute(query)
+        session.execute(query)
     except InvalidRequest:  # Field Type already exists
         pass
     
@@ -200,7 +206,7 @@ def create_tables():
                WITH $$ {{ "analyzer": {{"tokenizer": {{"class": "solr.StandardTokenizerFactory"}},
                          "filter": [ {{"class": "solr.LowerCaseFilterFactory"}} ] }}}} $$;""".format(cfg.dse_keyspace)
     try:
-        rows = session.execute(query)
+        session.execute(query)
     except InvalidRequest:  # Field Type already exists
         pass
     
@@ -208,19 +214,19 @@ def create_tables():
     # Create a new field for path (concatenate container + name)
     query = """ALTER SEARCH INDEX SCHEMA ON {0}.tree_node ADD fields.field[@name='path', @type='pathTextField'];""".format(cfg.dse_keyspace)
     try:
-        rows = session.execute(query)
+        session.execute(query)
     except InvalidRequest:  # Field already exists
         pass
     
     query = """ALTER SEARCH INDEX SCHEMA ON {0}.tree_node ADD copyField[@source='container', @dest='path'];""".format(cfg.dse_keyspace)
     try:
-        rows = session.execute(query)
+        session.execute(query)
     except InvalidRequest:  # Resource Element already exists
         pass
     
     query = """ALTER SEARCH INDEX SCHEMA ON {0}.tree_node ADD copyField[@source='name', @dest='path'];""".format(cfg.dse_keyspace)
     try:
-        rows = session.execute(query)
+        session.execute(query)
     except InvalidRequest:  # Resource Element already exists
         pass
     
@@ -232,10 +238,10 @@ def rebuild_index():
     cluster = connection.get_cluster()
     session = cluster.connect(cfg.dse_keyspace)
     query = """RELOAD SEARCH INDEX ON {0}.tree_node;""".format(cfg.dse_keyspace)
-    rows = session.execute(query)
+    session.execute(query)
     
     query = """REBUILD SEARCH INDEX ON {0}.tree_node;""".format(cfg.dse_keyspace)
-    rows = session.execute(query)
+    session.execute(query)
     
 
 def rm_search_field(name):
@@ -258,7 +264,7 @@ def rm_search_field(name):
                     cfg.dse_keyspace,
                     name)
     try:
-        rows = session.execute(query)
+        session.execute(query)
     except InvalidRequest:
         return
     

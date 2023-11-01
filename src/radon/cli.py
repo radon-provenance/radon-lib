@@ -17,6 +17,7 @@ Radon Admin Command Line Interface.
 
 Usage:
   radmin init
+  radmin populate
   radmin drop [-f]
   radmin ls [<path>] [-a] [--v=<VERSION>]
   radmin cd [<path>]
@@ -82,6 +83,7 @@ SESSION_PATH = os.path.join(os.path.expanduser("~/.radon"), "session.pickle")
 ARG_NAME = "<name>"
 ARG_PATH = "<path>"
 ARG_USERLIST = "<userlist>"
+ARG_DEST = "<dest>"
  
 MSG_GROUP_EXIST = "Group {} already exists"
 MSG_GROUP_NOT_EXIST = "Group {} doesn't exist"
@@ -147,11 +149,14 @@ class RadonApplication():
         """Create the tables"""
         create_tables()
         create_root()
-        create_default_users()
-        create_default_fields()
 
         session = self.create_session()
         self.save_session(session)
+    
+    def populate(self):
+        create_default_users()
+        create_default_fields()
+        
 
     def drop(self, args):
         """Remove the keyspace"""
@@ -163,7 +168,7 @@ class RadonApplication():
         if not args["-f"]:
             confirm = input("Are you sure you want to continue ? [y/N] ")
         
-            if not confirm.lower() in ["true", "y", "yes"]:
+            if confirm.lower() not in ["true", "y", "yes"]:
                 return
         
         destroy()
@@ -208,8 +213,8 @@ class RadonApplication():
         "Fetch a data object from the archive to a local file."
         src = args["<src>"]
         # Determine local filename
-        if args["<dest>"]:
-            localpath = args["<dest>"]
+        if args[ARG_DEST]:
+            localpath = args[ARG_DEST]
         else:
             localpath = src.rsplit("/")[-1]
         # Get the full destination path of the new resource
@@ -462,11 +467,11 @@ class RadonApplication():
     def mk_user(self, args):
         """Create a new user. Ask in the terminal for mandatory fields"""
         if not args[ARG_NAME]:
-            name = input("Please enter the user's username: ")
+            login = input("Please enter the user's username: ")
         else:
-            name = args[ARG_NAME]
-        if User.find(name):
-            self.print_error("Username {} already exists".format(name))
+            login = args[ARG_NAME]
+        if User.find(login):
+            self.print_error("Username {} already exists".format(login))
             return
         admin = input("Is this an administrator? [y/N] ")
         email = ""
@@ -476,13 +481,13 @@ class RadonApplication():
         while not pwd:
             pwd = getpass("Please enter the user's password: ")
         User.create(
-            name=name,
+            login=login,
             password=pwd,
             email=email,
             ldap=False,
             administrator=(admin.lower() in ["true", "y", "yes"]),
         )
-        print(MSG_USER_CREATED.format(name))
+        print(MSG_USER_CREATED.format(login))
 
     def mod_user(self, args):
         """Modify a user. Ask in the terminal if the value isn't provided"""
@@ -527,7 +532,7 @@ class RadonApplication():
 
         if is_reference:
             url = args["<url>"]
-            dest_path = args["<dest>"]
+            dest_path = args[ARG_DEST]
             # Get the full destination path of the new resource
             dest_path = self.get_full_path(dest_path)
         else:
@@ -540,8 +545,8 @@ class RadonApplication():
                 self.print_error("File '{}' doesn't exist".format(local_path))
                 return errno.ENOENT
 
-            if args["<dest>"]:
-                dest_path = args["<dest>"]
+            if args[ARG_DEST]:
+                dest_path = args[ARG_DEST]
                 
                 # We try to put the new file in a subcollection
                 if dest_path.endswith('/'):
@@ -573,7 +578,7 @@ class RadonApplication():
             self.print_error(MSG_COLL_NOT_EXIST.format(os.path.dirname(dest_path)))
 
 
-    def pwd(self, args):
+    def pwd(self):
         """Print working directory"""
         session = self.get_session()
         print(session.get('cwd', '/'))
@@ -678,13 +683,15 @@ def main():
         return app.init()
     if arguments["drop"]:
         return app.drop(arguments)
+    if arguments["populate"]:
+        return app.populate()
 
     elif arguments["ls"]:
         return app.ls(arguments)
     elif arguments["mkdir"]:
         return app.mkdir(arguments)
     elif arguments["pwd"]:
-        return app.pwd(arguments)
+        return app.pwd()
     elif arguments["cd"]:
         return app.change_dir(arguments)
     elif arguments["put"]:

@@ -154,4 +154,17 @@ class TreeNode(Model):
         session.execute(query, (self.container, self.name, self.version))
 
 
+    def update_acl_list(self, read_access, write_access):
+        """
+        Update ACL from lists of group uuids
+        
+        :param read_access: A list of group names which have read access
+        :type read_access: List[str]
+        :param write_access: A list of group names which have write access
+        :type write_access: List[str]
+        """
+        cql_string = acl_list_to_cql(read_access, write_access)
+        self.update_acl(cql_string)
+
+
 

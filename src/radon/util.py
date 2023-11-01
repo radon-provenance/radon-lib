@@ -337,6 +337,18 @@ def last_x_days(days=50):
     dt = datetime.now()
     dates = [dt] + [dt + timedelta(days=-x) for x in range(1, days)]
     return [d.strftime("%Y%m%d") for d in dates]
+
+
+def mk_cassandra_url(obj_uuid):
+    """Create a URL for an object stored in Cassandra, using its UUID
+    
+    :param obj_uuid: The UUID of the object
+    :type obj_uuid: str
+    
+    :return: The URL
+    :rtype: str
+    """
+    return radon.cfg.protocol_cassandra + obj_uuid 
  
  
 def merge(coll_name, resc_name):
@@ -459,6 +471,42 @@ def path_exists(path):
     return is_resource(path) or is_collection(path)
 
 
+def payload_check(path, payload, default_value=None):
+    """Check for a specific value in a json payload
+    { 
+    "obj" : {
+        "name" : "toto",
+        "value" : 10
+    },
+    "meta" : {
+        "sender" : "toto",
+        "msg" : "error"
+    }
+    /obj/value would return 10
+    /meta/sender would return "toto"
+    return None if the path is not valid
+    
+    :param path: a "path" in the json dict
+    :type path: str
+    :param payload: A JSON dictionary
+    :type payload: dict
+    :param default_value: The default value to return if not present
+    :type default_value: object
+    
+    :return: The object located at the path, default_value or None if not there
+    :rtype: object
+    """
+    try:
+        obj = payload
+        ls_elem = [x for x in path.split('/') if x] 
+        for elem in ls_elem:
+             obj = obj[elem]
+        return obj
+             
+    except KeyError:
+        return default_value
+
+
 def random_password(length=10):
     """Generate a random string of fixed length
     
@@ -527,7 +575,6 @@ def verify_ldap_password(username, password):
     except ldap.INVALID_CREDENTIALS:
         return False
     except ldap.SERVER_DOWN:
-        # TODO: Return error instead of none
         return False
 
 
@@ -543,6 +590,7 @@ def verify_password(password, hash):
     :rtype: bool
     """
     return pbkdf2_sha256.verify(password, hash)
+
 
 
 

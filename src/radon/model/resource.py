@@ -24,6 +24,7 @@ from abc import (
 import radon
 from radon.model import (
     DataObject,
+    Notification,
     TreeNode,
 )
 from radon.model.acl import (
@@ -95,10 +96,11 @@ class Resource(ABC):
     def chunk_content(self):
         """Get a chunk of the data object"""
         pass
+
  
     @classmethod
-    def create(cls, container, name, url=None, metadata=None, creator=None,
-               mimetype=None, size=None):
+    def create(cls, container, name, url=None, metadata=None, sender=None,
+               mimetype=None, size=None, read_access=None, write_access=None):
         """
         Create a new resource
         
@@ -110,8 +112,8 @@ class Resource(ABC):
         :type url: str, optional
         :param metadata: A Key/Value pair dictionary for user metadata
         :type metadata: dict, optional
-        :param creator: The name of the user who created the resource
-        :type creator: str, optional
+        :param sender: The name of the user who created the resource
+        :type sender: str, optional
         :param mimetype: The mimetype of the resource
         :type mimetype: str, optional
         :param size: The name of the user who created the resource
@@ -129,12 +131,18 @@ class Resource(ABC):
         path = merge(container, name)
         existing = cls.find(path)
         if existing:
-            raise ResourceConflictError(path)
+            Notification.create_fail_resource(sender, 
+                                              path,
+                                              "Conflict with a resource")
+            return None
             
         # Check if parent collection exists
         parent = Collection.find(container)
         if parent is None:
-            raise NoSuchCollectionError(container)
+            Notification.create_fail_resource(sender, 
+                                              path,
+                                              "Parent container doesn't exist")
+            return None
 
         now_date = now()
         if not metadata:
@@ -167,19 +175,18 @@ class Resource(ABC):
             is_object=True,
         )
         
-        if not creator:
-            creator = radon.cfg.sys_lib_user
+        if not sender:
+            sender = radon.cfg.sys_lib_user
         
         if url.startswith(radon.cfg.protocol_cassandra):
             new = RadonResource(resc_node)
         else:
             new = UrlLibResource(resc_node)
         
-        state = new.mqtt_get_state()
-        payload = new.mqtt_payload({}, state)
-        Notification.create_resource(creator, path, payload)
-#         # Index the resource
-#         new.index()
+        if read_access or write_access:
+            new.create_acl_list(read_access, write_access)
+        
+        Notification.create_success_resource(sender, new)
         return new
 
 
@@ -195,20 +202,29 @@ class Resource(ABC):
         self.node.create_acl_list(read_access, write_access)
 
 
-    def delete(self, username=None):
+    def delete(self, **kwargs):
         """
         Delete a resource and the associated row in the tree_node table
         
-        :param username: The name of the user who deleted the collection
-        :type username: str, optional
+        :param sender: The name of the user who deleted the collection
+        :type sender: str, optional
         """
+        if "sender" in kwargs:
+            sender = kwargs['sender']
+            del kwargs['sender']
+        else:
+            sender = radon.cfg.sys_lib_user
+
+        payload = {
+            "obj": self.mqtt_get_state(),
+            'meta' : {
+                "sender": sender
+            }
+        }
+        
         self.node.delete()
         
-        from radon.model import Notification
-        state = self.mqtt_get_state()
-        payload = self.mqtt_payload(state, {})
-        Notification.delete_resource(username, self.path, payload)
-#         self.reset()
+        Notification.delete_success_resource(payload)
 
 
     @classmethod
@@ -253,7 +269,7 @@ class Resource(ABC):
                 return UrlLibResource(node)
 
 
-    def full_dict(self, user=None):
+    def full_dict(self):
         """
         Return a dictionary which describes a resource for the web ui
         
@@ -595,8 +611,8 @@ class Resource(ABC):
         Update a resource. We intercept the call to encode the metadata if we
         modify it. Metadata passed in this method is user meta.
         
-        :param username: the name of the user who made the action
-        :type username: str, optional
+        :param sender: the name of the user who made the action
+        :type sender: str, optional
         :param metadata: The plain password to encrypt
         :type metadata: dict
         :param mimetype: The mimetype of the resource
@@ -623,21 +639,46 @@ class Resource(ABC):
             del kwargs["mimetype"]
             
 
-        if "username" in kwargs:
-            username = kwargs["username"]
-            del kwargs["username"]
+        if "sender" in kwargs:
+            sender = kwargs["sender"]
+            del kwargs["sender"]
         else:
-            username = None
+            sender = None
+        
+        if "read_access" in kwargs:
+            read_access = kwargs["read_access"]
+            del kwargs["read_access"]
+        else:
+            read_access = []
+        if "write_access" in kwargs:
+            write_access = kwargs["write_access"]
+            del kwargs["write_access"]
+        else:
+            write_access = []
+
+        if "url" in kwargs:
+            kwargs["object_url"] = kwargs["url"]
+            del kwargs["url"]
+            self.url = kwargs["object_url"]
  
         self.node.update(**kwargs)
         
+        if read_access or write_access:
+            self.update_acl_list(read_access, write_access)
+        
         resc = Resource.find(self.path)
         post_state = resc.mqtt_get_state()
-        payload = resc.mqtt_payload(pre_state, post_state)
-        Notification.update_resource(username, resc.path, payload)
- 
-        # Index the resource
-        # resc.index()
+        
+        if (pre_state != post_state):
+            payload = {
+                "pre" : pre_state,
+                "post": post_state,
+                "meta": {
+                    "sender": sender
+                    }
+            }
+            Notification.update_success_resource(payload)
+        return self
 
 
     def update_acl_cdmi(self, cdmi_acl):
@@ -645,6 +686,18 @@ class Resource(ABC):
         of ACE dictionary), existing ACL are replaced"""
         cql_string = acl_cdmi_to_cql(cdmi_acl)
         self.node.update_acl(cql_string)
+
+
+    def update_acl_list(self, read_access, write_access):
+        """
+        Update ACL from lists of group uuids
+        
+        :param read_access: A list of group names which have read access
+        :type read_access: List[str]
+        :param write_access: A list of group names which have write access
+        :type write_access: List[str]
+        """
+        self.node.update_acl_list(read_access, write_access)
 
 
     def user_can(self, user, action):
@@ -754,16 +807,16 @@ class RadonResource(Resource):
         return None
 
 
-    def delete(self, username=None):
+    def delete(self, **kwargs):
         """
         Delete a resource and the associated row in the tree_node table and all 
         the corresponding blobs
         
-        :param username: The name of the user who deleted the collection
-        :type username: str, optional
+        :param sender: The name of the user who deleted the collection
+        :type sender: str, optional
         """
         self.delete_data_objects()
-        Resource.delete(self, username)
+        Resource.delete(self, **kwargs)
 
 
     def delete_data_objects(self):
@@ -780,7 +833,7 @@ class RadonResource(Resource):
         :return: The dictionary with the information needed for the UI
         :rtype: dict
         """
-        data = Resource.full_dict(self, user=user)
+        data = Resource.full_dict(self)
         if self.obj:
             data["size"] = self.get_size()
         if user:

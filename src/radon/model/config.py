@@ -56,8 +56,8 @@ DEFAULT_GROUPS = [
 ]
 
 DEFAULT_USERS = [
-    ("admin", "admin@radon.com", "radon", True, ["admins", "users"]),
-    ("test", "test@radon.com", "radon", False, ["users"])
+    ("admin", "Default Administrator", "admin@radon.com", "radon", True, ["admins", "users"]),
+    ("test", "Test User", "test@radon.com", "radon", False, ["users"])
 ]
 
 
@@ -293,7 +293,7 @@ class Config(Model):
     
     
     @classmethod
-    def get_search_indexes(self):  
+    def get_search_indexes(cls):  
         cfg_fields = Config.objects.filter(module=MODULE_SEARCH,
                                            option=OPTION_FIELD_META)
         list_index = []

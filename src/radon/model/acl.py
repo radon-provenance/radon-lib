@@ -322,7 +322,6 @@ def acl_list_to_cql(read_access, write_access):
         elif gname.upper() == "ANONYMOUS@":
             ident = "ANONYMOUS@"
         else: 
-            # TODO log or return error if the identifier isn't found ?
             radon.cfg.logger.warning(
                 "The group {0} doesn't exist".format(
                     gname

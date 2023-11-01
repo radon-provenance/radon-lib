@@ -25,6 +25,7 @@ from radon.model import (
 from radon.model.errors import UserConflictError
 from radon.util import (
     datetime_serializer,
+    default_time,
     default_uuid,
     encrypt_password,
     verify_ldap_password,
@@ -39,8 +40,8 @@ class User(Model):
     
     :param uuid: A uuid associated to the user
     :type uuid: :class:`columns.Text`
-    :param name: The user name, used as the primary key
-    :type name: :class:`columns.Text`
+    :param login: The user name, used as the primary key
+    :type login: :class:`columns.Text`
     :param email: The user email
     :type email: :class:`columns.Text`
     :param password: The user password, stored hashed
@@ -54,43 +55,49 @@ class User(Model):
     :type ldap: :class:`columns.Boolean`
     :param groups: A list of group names
     :type groups: :class:`columns.List`
+    :param fullname: The user full name
+    :type fullname: :class:`columns.Text`
+    :param create_ts: The date/time for the creation of the user
+    :type create_ts: :class:`columns.TimeUUID`
     """
 
-    uuid = columns.Text(default=default_uuid)
-    name = columns.Text(primary_key=True, required=True)
-    email = columns.Text(required=True)
+    login = columns.Text(primary_key=True, required=True)
     password = columns.Text(required=True)
-    administrator = columns.Boolean(required=True, default=False)
-    active = columns.Boolean(required=True, default=True)
-    ldap = columns.Boolean(required=True, default=False)
+    fullname = columns.Text(index=True)
+    email = columns.Text()
+    administrator = columns.Boolean(default=False)
+    active = columns.Boolean(default=True)
+    ldap = columns.Boolean(default=False)
     groups = columns.List(columns.Text, index=True)
+    uuid = columns.Text(default=default_uuid)
+    create_ts = columns.TimeUUID(default=default_time)
 
 
-    def add_group(self, groupname, username=None):
+    def add_group(self, groupname, sender=None):
         """
         Add the user to a group
         
         :param groupname: The group to be added to
         :type groupname: str
-        :param username: the name of the user who made the action
-        :type username: str, optional
+        :param sender: the name of the user who made the action
+        :type sender: str, optional
         """
-        self.add_groups([groupname], username)
+        self.add_groups([groupname], sender)
 
 
-    def add_groups(self, ls_group, username=None):
+    def add_groups(self, ls_group, sender=None):
         """
         Add the user to a list of groups
         
         :param ls_group: The groups to be added to
         :type groupname: List[str]
-        :param username: the name of the user who made the action
-        :type username: str, optional
+        :param sender: the name of the user who made the action
+        :type sender: str, optional
         """
         new_groups = self.get_groups() + ls_group
         # remove duplicate
         new_groups = list(set(new_groups))
-        self.update(groups=new_groups, username=username)
+        self.update(groups=new_groups, sender=sender)
 
 
     def authenticate(self, password):
@@ -105,7 +112,7 @@ class User(Model):
         """
         if self.active:
             if self.ldap:
-                return verify_ldap_password(self.name, password)
+                return verify_ldap_password(self.login, password)
             else:
                 return verify_password(password, self.password)
         return False
@@ -118,61 +125,86 @@ class User(Model):
         We intercept the create call so that we can correctly
         hash the password into an unreadable form
         
-        :param name: the name of the user
-        :type name: str
+        :param login: the name of the user
+        :type login: str
         :param password: The plain password to encrypt
         :type password: str
-        :param username: the name of the user who made the action
-        :type username: str, optional
+        :param sender: the name of the user who made the action
+        :type sender: str, optional
         
         :return: The new created user
         :rtype: :class:`radon.model.User`
         """
-        # username is the name of the user who initiated the call, it has to
+        # sender is the name of the user who initiated the call, it has to
         # be removed for the Cassandra call
-        if "username" in kwargs:
-            username = kwargs["username"]
-            del kwargs["username"]
+        if "sender" in kwargs:
+            sender = kwargs["sender"]
+            del kwargs["sender"]
         else:
-            username = radon.cfg.sys_lib_user
+            sender = radon.cfg.sys_lib_user
         kwargs["password"] = encrypt_password(kwargs["password"])
 
-        if cls.objects.filter(name=kwargs["name"]).count():
-            raise UserConflictError(kwargs["name"])
+        if cls.objects.filter(login=kwargs["login"]).count():
+            Notification.create_fail_user(sender, 
+                                          kwargs["login"],
+                                          "User already exists")
+            return None
 
         user = super(User, cls).create(**kwargs)
 
-        state = user.mqtt_get_state()
-        payload = user.mqtt_payload({}, state)
-        Notification.create_user(username, user.name, payload)
+        Notification.create_success_user(sender, user)
         return user
 
-    def delete(self, username=None):
+    @classmethod
+    def delete_user(cls, name):
+        """
+        Delete a user in the database if he exists.
+        :param name: the name of the user
+        :type name: str
+        """
+        user = cls.find(name)
+        if not user:
+            return
+        user.delete()       
+        
+        
+        
+    def delete(self, **kwargs):
         """
         Delete the user in the database.
         
-        :param username: the name of the user who made the action
-        :type username: str, optional
+        :param sender: The name of the user who made the action
+        :type sender: str, optional
         """
-        state = self.mqtt_get_state()
+        if "sender" in kwargs:
+            sender = kwargs['sender']
+            del kwargs['sender']
+        else:
+            sender = radon.cfg.sys_lib_user
+            
+        payload = {
+            "obj": self.mqtt_get_state(),
+            'meta' : {
+                "sender": sender
+            }
+        }
         super(User, self).delete()
-        payload = self.mqtt_payload(state, {})
-        # username is the id of the user who did the operation
-        # user.uuid is the id of the new user
-        Notification.delete_user(username, self.name, payload)
+        
+        Notification.delete_success_user(payload)
+        
 
     @classmethod
-    def find(cls, name):
+    def find(cls, login):
         """
-        Find a user from his name.
+        Find a user from his login.
         
-        :param name: the name of the user
-        :type name: str
+        :param login: the login of the user
+        :type login: str
         
         :return: The user which has been found
         :rtype: :class:`radon.model.User`
         """
-        return cls.objects.filter(name=name).first()
+        return cls.objects.filter(login=login).first()
 
     def get_groups(self):
         """
@@ -210,59 +242,40 @@ class User(Model):
         """
         payload = dict()
         payload["uuid"] = self.uuid
-        payload["name"] = self.name
+        payload["login"] = self.login
+        payload["fullname"] = self.fullname
         payload["email"] = self.email
         payload["active"] = self.active
+        payload["administrator"] = self.administrator
         payload["groups"] = [g.name for g in Group.find_all(self.groups)]
         return payload
 
-    def mqtt_payload(self, pre_state, post_state):
-        """
-        Get a string version of the payload of the message, with the pre and
-        post states. The pre and post states are stored in a dictionary and
-        dumped in a JSON string.
-        
-        :param pre_state: The dictionary which describes the state of the user
-          before a modification
-        :type pre_state: dict
-        :param post_state: The dictionary which describes the state of the user
-          after a modification
-        :type post_state: dict
-        
-        :return: The payload as a JSON string
-        :rtype: str
-        """
-        payload = dict()
-        payload["pre"] = pre_state
-        payload["post"] = post_state
-        return json.dumps(payload, default=datetime_serializer)
 
-
-    def rm_group(self, groupname, username=None):
+    def rm_group(self, groupname, sender=None):
         """
         Remove the user from a group.
         
         :param groupname: The group to be removed from
         :type groupname: str
-        :param username: the name of the user who made the action
-        :type username: str, optional
+        :param sender: the name of the user who made the action
+        :type sender: str, optional
         """
         self.rm_groups([groupname])
 
 
-    def rm_groups(self, ls_group, username=None):
+    def rm_groups(self, ls_group, sender=None):
         """
         Remove the user from a list of groups.
         
         :param groupname: The groups to be removed from
         :type groupname: List[str]
-        :param username: the name of the user who made the action
-        :type username: str, optional
+        :param sender: the name of the user who made the action
+        :type sender: str, optional
         """
         new_groups = set(self.get_groups()) - set(ls_group)
         # remove duplicate
         new_groups = list(set(new_groups))
-        self.update(groups=new_groups, username=username)
+        self.update(groups=new_groups, sender=sender)
 
 
     def to_dict(self):
@@ -274,7 +287,8 @@ class User(Model):
         """
         return {
             "uuid": self.uuid,
-            "name": self.name,
+            "login": self.login,
+            "fullname": self.fullname,
             "email": self.email,
             "administrator": self.administrator,
             "active": self.active,
@@ -287,8 +301,8 @@ class User(Model):
         Update a user. We intercept the call to encrypt the password if we
         modify it.
         
-        :param username: the name of the user who made the action
-        :type username: str, optional
+        :param sender: the name of the user who made the action
+        :type sender: str, optional
         :param password: The plain password to encrypt
         :type password: str
         
@@ -301,18 +315,26 @@ class User(Model):
         if "password" in kwargs:
             kwargs["password"] = encrypt_password(kwargs["password"])
 
-        if "username" in kwargs:
-            username = kwargs["username"]
-            del kwargs["username"]
-        else:
-            username = None
+        if "login" in kwargs:
+            del kwargs["login"]
+        sender = radon.cfg.sys_lib_user
+        if "sender" in kwargs:
+            sender = kwargs['sender']
+            del kwargs['sender']
 
         super(User, self).update(**kwargs)
-        user = User.find(self.name)
+        user = User.find(self.login)
         post_state = user.mqtt_get_state()
-        payload = user.mqtt_payload(pre_state, post_state)
+        
         if (pre_state != post_state):
-            Notification.update_user(username, user.name, payload)
+            payload = {
+                "pre" : pre_state,
+                "post": post_state,
+                "meta": {
+                    "sender": sender
+                    }
+            }
+            Notification.update_success_user(payload)
         return self
 
 
