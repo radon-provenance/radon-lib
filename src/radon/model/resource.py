@@ -186,7 +186,13 @@ class Resource(ABC):
         if read_access or write_access:
             new.create_acl_list(read_access, write_access)
         
-        Notification.create_success_resource(sender, new)
+        payload = {
+            "obj": new.mqtt_get_state(),
+            'meta' : {
+                "sender": sender
+            }
+        }
+        Notification.create_success_resource(payload)
         return new
 
 

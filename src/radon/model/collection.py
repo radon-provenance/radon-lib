@@ -90,7 +90,7 @@ class Collection(object):
         self.uuid = self.node.uuid
 
     @classmethod
-    def create(cls, container, name, metadata=None, creator=None, 
+    def create(cls, container, name, metadata=None, sender=None, 
                read_access=None, write_access=None):
         """
         Create a new collection
@@ -101,8 +101,8 @@ class Collection(object):
         :type name: str
         :param metadata: A Key/Value pair dictionary for user metadata
         :type metadata: dict, optional
-        :param creator: The name of the user who created the collection
-        :type creator: str, optional
+        :param sender: The name of the user who created the collection
+        :type sender: str, optional
         
         :return: The new Collection object
         :rtype: :class:`radon.model.Collection`
@@ -120,19 +120,19 @@ class Collection(object):
         # Check if parent collection exists
         parent = Collection.find(container)
         if parent is None:
-            Notification.create_fail_collection(creator, 
+            Notification.create_fail_collection(sender, 
                                                 path,
                                                 "Parent container doesn't exist")
             return None
         resource = Resource.find(merge(container, name))
         if resource is not None:
-            Notification.create_fail_collection(creator, 
+            Notification.create_fail_collection(sender, 
                                                 path,
                                                 "Conflict with a resource")
             return None
         collection = Collection.find(path)
         if collection is not None:
-            Notification.create_fail_collection(creator, 
+            Notification.create_fail_collection(sender, 
                                                 path,
                                                 "Conflict with a collection")
             return None
@@ -153,16 +153,22 @@ class Collection(object):
             user_meta=user_meta,
             sys_meta=sys_meta
         )
-        if not creator:
-            creator = radon.cfg.sys_lib_user
+        if not sender:
+            sender = radon.cfg.sys_lib_user
         
         new = cls(coll_node)
         
         if read_access or write_access:
             new.create_acl_list(read_access, write_access)
-                
         
-        Notification.create_success_collection(creator, new)
+        payload = {
+            "obj": new.mqtt_get_state(),
+            'meta' : {
+                "sender": sender
+            }
+        }
+        
+        Notification.create_success_collection(payload)
         return new
 
 

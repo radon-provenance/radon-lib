@@ -117,14 +117,29 @@ class Group(Model):
             sender = radon.cfg.sys_lib_user
         # Make sure name id not in use.
         if cls.objects.filter(name=kwargs["name"]).count():
-            Notification.create_fail_group(sender, 
-                                           kwargs["name"],
-                                           "Group already exists")
+            
+            payload = {
+                "obj": {
+                    "name" : kwargs["name"]
+                },
+                'meta' : {
+                    "sender": sender,
+                    "msg": "Group already exists"
+                }
+            }
+            Notification.create_fail_group(payload)
             return None
         
         group = super(Group, cls).create(**kwargs)
         
-        Notification.create_success_group(sender, group)
+        payload = {
+            "obj": group.mqtt_get_state(),
+            'meta' : {
+                "sender": sender
+            }
+        }
+        
+        Notification.create_success_group(payload)
         return group
 
 

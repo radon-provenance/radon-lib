@@ -152,7 +152,14 @@ class User(Model):
 
         user = super(User, cls).create(**kwargs)
 
-        Notification.create_success_user(sender, user)
+
+        payload = {
+            "obj": user.mqtt_get_state(),
+            'meta' : {
+                "sender": sender
+            }
+        }
+        Notification.create_success_user(payload)
         return user
 
     @classmethod

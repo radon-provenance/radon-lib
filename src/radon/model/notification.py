@@ -115,6 +115,57 @@ class Notification(Model):
     processed = columns.Boolean()
     # The payload of the message which is sent to MQTT
     payload = columns.Text()
+    
+    
+    def mqtt_publish(self):
+        """
+        Try to publish the notification on MQTT
+        """
+        topic = u"{0}/{1}/{2}/{3}".format(
+            self.op_name,
+            self.op_type, 
+            self.obj_type, 
+            self.obj_key)
+        # Clean up the topic by removing superfluous slashes.
+        topic = "/".join(filter(None, topic.split("/")))
+        # Remove MQTT wildcards from the topic. Corner-case: If the collection name is made entirely of # and + and a
+        # script is set to run on such a collection name. But that's what you get if you use stupid names for things.
+        topic = topic.replace("#", "").replace("+", "")
+        logging.info(u'Publishing on topic "{0}"'.format(topic))
+        try:
+            publish.single(topic, self.payload, hostname=radon.cfg.mqtt_host)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except:
+            self.update(processed=False)
+            logging.error(u'Problem while publishing on topic "{0}"'.format(topic))
+
+
+    def to_dict(self, user=None):
+        """
+        Return a dictionary which describes a notification for the web ui
+        
+        :return: The dictionary with the information needed for the UI
+        :rtype: dict
+        """
+        data = {
+            "date": self.date,
+            "when": self.when,
+            "operation_name": self.op_name,
+            "operation_type": self.op_type,
+            "object_type": self.obj_type,
+            "object_key": self.obj_key,
+            "sender": self.sender,
+            "payload": json.loads(self.payload),
+        }
+        return data
+
+
+
+###################
+## Class Methods ##
+###################
+
 
 
     @classmethod
@@ -369,7 +420,7 @@ class Notification(Model):
             op_name=OP_CREATE,
             op_type=OPT_REQUEST,
             obj_type=OBJ_RESOURCE,
-            obj_key=merge(payload['obj']['container'], payload['obj']['name']),
+            obj_key=payload['obj']['path'],
             sender=payload['meta']['sender'],
             processed=True,
             payload=json.dumps(payload, default=datetime_serializer),
@@ -420,20 +471,15 @@ class Notification(Model):
 
 
     @classmethod
-    def create_success_collection(cls, sender, coll):
-        payload = {
-            "obj": coll.mqtt_get_state(),
-            'meta' : {
-                "sender": sender
-            }
-        }
+    def create_success_collection(cls, payload):
+        
         
         new = cls.new(
             op_name=OP_CREATE,
             op_type=OPT_SUCCESS,
             obj_type=OBJ_COLLECTION,
-            obj_key=coll.path,
-            sender=sender,
+            obj_key=payload['obj']['path'],
+            sender=payload['meta']['sender'],
             processed=True,
             payload=json.dumps(payload, default=datetime_serializer),
         )
@@ -442,19 +488,12 @@ class Notification(Model):
 
 
     @classmethod
-    def create_success_group(cls, sender, group):
-        payload = {
-            "obj": group.mqtt_get_state(),
-            'meta' : {
-                "sender": sender
-            }
-        }
-        
+    def create_success_group(cls, payload):
         new = cls.new(
             op_name=OP_CREATE,
             op_type=OPT_SUCCESS,
             obj_type=OBJ_GROUP,
-            obj_key=group.name,
+            obj_key=payload['obj']['name'],
             sender=payload['meta']['sender'],
             processed=True,
             payload=json.dumps(payload, default=datetime_serializer),
@@ -464,19 +503,12 @@ class Notification(Model):
 
 
     @classmethod
-    def create_success_resource(cls, sender, resc):
-        payload = {
-            "obj": resc.mqtt_get_state(),
-            'meta' : {
-                "sender": sender
-            }
-        }
-        
+    def create_success_resource(cls, payload):
         new = cls.new(
             op_name=OP_CREATE,
             op_type=OPT_SUCCESS,
             obj_type=OBJ_RESOURCE,
-            obj_key=resc.path,
+            obj_key=payload['obj']['path'],
             sender=payload['meta']['sender'],
             processed=True,
             payload=json.dumps(payload, default=datetime_serializer),
@@ -486,19 +518,12 @@ class Notification(Model):
 
 
     @classmethod
-    def create_success_user(cls, sender, user):
-        payload = {
-            "obj": user.mqtt_get_state(),
-            'meta' : {
-                "sender": sender
-            }
-        }
-        
+    def create_success_user(cls, payload):
         new = cls.new(
             op_name=OP_CREATE,
             op_type=OPT_SUCCESS,
             obj_type=OBJ_USER,
-            obj_key=payload_check(P_OBJ_LOGIN, payload),
+            obj_key=payload['obj']['login'],
             sender=payload['meta']['sender'],
             processed=True,
             payload=json.dumps(payload, default=datetime_serializer),
@@ -601,7 +626,6 @@ class Notification(Model):
         return new
 
 
-
     @classmethod
     def delete_fail_user(cls, payload):
         """
@@ -665,7 +689,6 @@ class Notification(Model):
         new.mqtt_publish()
         return new
 
-    
 
     @classmethod
     def delete_request_group(cls, payload):
@@ -888,6 +911,17 @@ class Notification(Model):
 
 
     @classmethod
+    def new(cls, **kwargs):
+        """
+        Create a new Notification
+        
+        :return: The notification
+        :rtype: :class:`columns.model.Notification`"""
+        new = super(Notification, cls).create(**kwargs)
+        return new
+
+
+    @classmethod
     def recent(cls, count=20):
         """
         Return the latest activities
@@ -923,26 +957,6 @@ class Notification(Model):
         return res
 
 
-    def to_dict(self, user=None):
-        """
-        Return a dictionary which describes a notification for the web ui
-        
-        :return: The dictionary with the information needed for the UI
-        :rtype: dict
-        """
-        data = {
-            "date": self.date,
-            "when": self.when,
-            "operation_name": self.op_name,
-            "operation_type": self.op_type,
-            "object_type": self.obj_type,
-            "object_key": self.obj_key,
-            "sender": self.sender,
-            "payload": json.loads(self.payload),
-        }
-        return data
-
-
     @classmethod
     def update_fail_collection(cls, payload):
         """
@@ -976,7 +990,7 @@ class Notification(Model):
         new.mqtt_publish()
         return new
 
-    
+
     @classmethod
     def update_fail_group(cls, payload):
         """
@@ -1077,7 +1091,6 @@ class Notification(Model):
         return new
 
 
-
     @classmethod
     def update_request_collection(cls, payload):
         """
@@ -1118,6 +1131,7 @@ class Notification(Model):
         )
         new.mqtt_publish()
         return new
+
 
     @classmethod
     def update_request_group(cls, payload):
@@ -1328,8 +1342,8 @@ class Notification(Model):
         )
         new.mqtt_publish()
         return new
-    
-    
+
+
     @classmethod
     def update_success_user(cls, payload):
         if 'meta' not in payload:
@@ -1360,37 +1374,6 @@ class Notification(Model):
         return new
 
 
-    def mqtt_publish(self):
-        """
-        Try to publish the notification on MQTT
-        """
-        topic = u"{0}/{1}/{2}/{3}".format(
-            self.op_name,
-            self.op_type, 
-            self.obj_type, 
-            self.obj_key)
-        # Clean up the topic by removing superfluous slashes.
-        topic = "/".join(filter(None, topic.split("/")))
-        # Remove MQTT wildcards from the topic. Corner-case: If the collection name is made entirely of # and + and a
-        # script is set to run on such a collection name. But that's what you get if you use stupid names for things.
-        topic = topic.replace("#", "").replace("+", "")
-        logging.info(u'Publishing on topic "{0}"'.format(topic))
-        try:
-            publish.single(topic, self.payload, hostname=radon.cfg.mqtt_host)
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except:
-            self.update(processed=False)
-            logging.error(u'Problem while publishing on topic "{0}"'.format(topic))
-    
 
-    @classmethod
-    def new(cls, **kwargs):
-        """
-        Create a new Notification
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`"""
-        new = super(Notification, cls).create(**kwargs)
-        return new
+
 
