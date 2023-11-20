@@ -129,19 +129,25 @@ class Resource(ABC):
  
         # Make sure parent/name are not in use.
         path = merge(container, name)
+
+        if not sender:
+            sender = radon.cfg.sys_lib_user
+
+        payload = {'meta' : {'sender': sender}}
+        
         existing = cls.find(path)
         if existing:
-            Notification.create_fail_resource(sender, 
-                                              path,
-                                              "Conflict with a resource")
+            payload['obj'] = {'path' : path}
+            payload['meta']['msg'] = "Conflict with a resource"
+            Notification.create_fail_resource(payload)
             return None
             
         # Check if parent collection exists
         parent = Collection.find(container)
         if parent is None:
-            Notification.create_fail_resource(sender, 
-                                              path,
-                                              "Parent container doesn't exist")
+            payload['obj'] = {'path' : path}
+            payload['meta']['msg'] = "Parent container doesn't exist"
+            Notification.create_fail_resource(payload)
             return None
 
         now_date = now()
@@ -174,10 +180,7 @@ class Resource(ABC):
             object_url=url,
             is_object=True,
         )
-        
-        if not sender:
-            sender = radon.cfg.sys_lib_user
-        
+
         if url.startswith(radon.cfg.protocol_cassandra):
             new = RadonResource(resc_node)
         else:
@@ -186,12 +189,8 @@ class Resource(ABC):
         if read_access or write_access:
             new.create_acl_list(read_access, write_access)
         
-        payload = {
-            "obj": new.mqtt_get_state(),
-            'meta' : {
-                "sender": sender
-            }
-        }
+        payload["obj"] = new.mqtt_get_state()
+        
         Notification.create_success_resource(payload)
         return new
 

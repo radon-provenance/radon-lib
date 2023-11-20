@@ -53,6 +53,7 @@ P_META_MSG = "/meta/msg"
 P_META_SENDER = "/meta/sender"
 P_OBJ_CONTAINER = "/obj/container"
 P_OBJ_NAME = "/obj/name"
+P_OBJ_PATH = "/obj/path"
 P_OBJ_LOGIN = "/obj/login"
 P_PRE_NAME = "/pre/name"
 P_PRE_CONTAINER = "/pre/container"
@@ -171,8 +172,7 @@ class Notification(Model):
     @classmethod
     def create_fail_collection(cls, payload):
         """
-        The creation of a collection failed, publish the message on MQTT
-        
+        The creation of a collection failed, publish the message on MQTT        
         
         :return: The notification
         :rtype: :class:`columns.model.Notification`
@@ -181,75 +181,28 @@ class Notification(Model):
             payload['meta'] = {}
         if not payload_check(P_META_MSG, payload):
             payload['meta']['msg'] = MSG_CREATE_FAILED
-        payload['meta']['sender'] = payload_check(P_META_SENDER, 
-                                                  payload, 
-                                                  radon.cfg.sys_lib_user)
 
-        container = payload_check(P_OBJ_CONTAINER, payload, "/")
-        name = payload_check(P_OBJ_NAME, payload, "")
-        path = merge(container, name)
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
 
-        new = cls.new(
-            op_name=OP_CREATE,
-            op_type=OPT_FAIL,
-            obj_type=OBJ_COLLECTION,
-            obj_key=path,
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        return cls.create_notification(OP_CREATE, OPT_FAIL, OBJ_COLLECTION, 
+                                       path, payload)
 
 
     @classmethod
     def create_fail_group(cls, payload):
-        """
-        The creation of a group failed, publish the message on MQTT
-        
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
         if 'meta' not in payload:
             payload['meta'] = {}
         if not payload_check(P_META_MSG, payload):
             payload['meta']['msg'] = MSG_CREATE_FAILED
-
-        payload['meta']['sender'] = payload_check(P_META_SENDER, 
-                                                  payload, 
-                                                  radon.cfg.sys_lib_user)
         
         name = payload_check(P_OBJ_NAME, payload, "Undefined")
-         
-        new = cls.new(
-            op_name=OP_CREATE,
-            op_type=OPT_FAIL,
-            obj_type=OBJ_COLLECTION,
-            obj_key=name,
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+
+        return cls.create_notification(OP_CREATE, OPT_FAIL, OBJ_GROUP, name,
+                                       payload)
 
 
     @classmethod
     def create_fail_resource(cls, payload):
-        """
-        The creation of a resource failed, publish the message on MQTT
-        
-        :param sender: The user who initiates the operation
-        :type sender: str
-        :param obj: The dictionary that contains Resource information
-        :type obj: dict
-        :param msg: A message to explain what was wrong
-        :type msg: str
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
         if 'meta' not in payload:
             payload['meta'] = {}
         if not payload_check(P_META_MSG, payload):
@@ -258,33 +211,15 @@ class Notification(Model):
         payload['meta']['sender'] = payload_check(P_META_SENDER, 
                                                   payload, 
                                                   radon.cfg.sys_lib_user)
-        
-        container = payload_check(P_OBJ_CONTAINER, payload, "/")
-        name = payload_check(P_OBJ_NAME, payload, "")
-        path = merge(container, name)
-            
-        new = cls.new(
-            op_name=OP_CREATE,
-            op_type=OPT_FAIL,
-            obj_type=OBJ_RESOURCE,
-            obj_key=path,
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+
+        return cls.create_notification(OP_CREATE, OPT_FAIL, OBJ_RESOURCE, path,
+                                       payload)
 
 
     @classmethod
     def create_fail_user(cls, payload):
-        """
-        The creation of a user failed, publish the message on MQTT
-        
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
         if 'meta' not in payload:
             payload['meta'] = {}
         if not payload_check(P_META_MSG, payload):
@@ -294,14 +229,22 @@ class Notification(Model):
                                                   payload, 
                                                   radon.cfg.sys_lib_user)
         
-        name = payload_check(P_OBJ_NAME, payload, "Undefined")
-         
+        login = payload_check(P_OBJ_LOGIN, payload, "Undefined")
+
+        return cls.create_notification(OP_CREATE, OPT_FAIL, OBJ_USER, login,
+                                       payload)
+
+
+    @classmethod
+    def create_notification(cls, op_name, op_type, obj_type, obj_key,
+                            payload):
+        sender = payload_check(P_META_SENDER, payload, radon.cfg.sys_lib_user)
         new = cls.new(
-            op_name=OP_CREATE,
-            op_type=OPT_FAIL,
-            obj_type=OBJ_USER,
-            obj_key=name,
-            sender=payload['meta']['sender'],
+            op_name=op_name,
+            op_type=op_type,
+            obj_type=obj_type,
+            obj_key=obj_key,
+            sender=sender,
             processed=True,
             payload=json.dumps(payload, default=datetime_serializer),
         )
@@ -311,16 +254,6 @@ class Notification(Model):
 
     @classmethod
     def create_request_collection(cls, payload):
-        """
-        Ask for the creation of a collection and publish the message on MQTT
-        
-        
-        :param payload: The dictionary that contains message information
-        :type obj: dict
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
         if 'meta' not in payload:
             payload['meta'] = {}
         sender = payload_check(P_META_SENDER, payload)
@@ -338,31 +271,13 @@ class Notification(Model):
             payload['meta']['msg'] = msg
             return cls.create_fail_collection(payload)
 
-        new = cls.new(
-            op_name=OP_CREATE,
-            op_type=OPT_REQUEST,
-            obj_type=OBJ_COLLECTION,
-            obj_key=merge(payload['obj']['container'], payload['obj']['name']),
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+        return cls.create_notification(OP_CREATE, OPT_REQUEST, OBJ_COLLECTION, 
+                                       path, payload)
 
 
     @classmethod
     def create_request_group(cls, payload):
-        """
-        Ask for the creation of a group and publish the message on MQTT
-        
-        
-        :param payload: The dictionary that contains message information
-        :type obj: dict
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
         if 'meta' not in payload:
             payload['meta'] = {}
         sender = payload_check(P_META_SENDER, payload)
@@ -378,27 +293,13 @@ class Notification(Model):
             payload['meta']['msg'] = msg
             return cls.create_fail_group(payload)
 
-        new = cls.new(
-            op_name=OP_CREATE,
-            op_type=OPT_REQUEST,
-            obj_type=OBJ_GROUP,
-            obj_key=payload['obj']['name'],
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        name = payload_check(P_OBJ_NAME, payload, "Unknown")
+        return cls.create_notification(OP_CREATE, OPT_REQUEST, OBJ_GROUP, name,
+                                       payload)
 
 
     @classmethod
     def create_request_resource(cls, payload):
-        """
-        Ask for the creation of a resource and publish the message on MQTT
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
         if 'meta' not in payload:
             payload['meta'] = {}
         sender = payload_check(P_META_SENDER, payload)
@@ -416,30 +317,13 @@ class Notification(Model):
             payload['meta']['msg'] = msg
             return cls.create_fail_resource(payload)
 
-        new = cls.new(
-            op_name=OP_CREATE,
-            op_type=OPT_REQUEST,
-            obj_type=OBJ_RESOURCE,
-            obj_key=payload['obj']['path'],
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+        return cls.create_notification(OP_CREATE, OPT_REQUEST, OBJ_RESOURCE, 
+                                       path, payload)
     
 
     @classmethod
     def create_request_user(cls, payload):
-        """
-        Ask for the creation of a user and publish the message on MQTT
-        
-        :param payload: The dictionary that contains message information
-        :type obj: dict
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
         if 'meta' not in payload:
             payload['meta'] = {}
         sender = payload_check(P_META_SENDER, payload)
@@ -457,90 +341,41 @@ class Notification(Model):
             payload['meta']['msg'] = msg
             return cls.create_fail_user(payload)
 
-        new = cls.new(
-            op_name=OP_CREATE,
-            op_type=OPT_REQUEST,
-            obj_type=OBJ_USER,
-            obj_key=payload['obj']['login'],
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        login = payload_check(P_OBJ_LOGIN, payload, "Unknown")
+        return cls.create_notification(OP_CREATE, OPT_REQUEST, OBJ_USER, login,
+                                       payload)
 
 
     @classmethod
     def create_success_collection(cls, payload):
-        
-        
-        new = cls.new(
-            op_name=OP_CREATE,
-            op_type=OPT_SUCCESS,
-            obj_type=OBJ_COLLECTION,
-            obj_key=payload['obj']['path'],
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+        return cls.create_notification(OP_CREATE, OPT_SUCCESS, OBJ_COLLECTION, 
+                                       path, payload)
 
 
     @classmethod
     def create_success_group(cls, payload):
-        new = cls.new(
-            op_name=OP_CREATE,
-            op_type=OPT_SUCCESS,
-            obj_type=OBJ_GROUP,
-            obj_key=payload['obj']['name'],
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        name = payload_check(P_OBJ_NAME, payload, "Unknown")
+        return cls.create_notification(OP_CREATE, OPT_SUCCESS, OBJ_GROUP, name,
+                                       payload)
 
 
     @classmethod
     def create_success_resource(cls, payload):
-        new = cls.new(
-            op_name=OP_CREATE,
-            op_type=OPT_SUCCESS,
-            obj_type=OBJ_RESOURCE,
-            obj_key=payload['obj']['path'],
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+        return cls.create_notification(OP_CREATE, OPT_SUCCESS, OBJ_RESOURCE, 
+                                       path, payload)
 
 
     @classmethod
     def create_success_user(cls, payload):
-        new = cls.new(
-            op_name=OP_CREATE,
-            op_type=OPT_SUCCESS,
-            obj_type=OBJ_USER,
-            obj_key=payload['obj']['login'],
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        login = payload_check(P_OBJ_LOGIN, payload, "Unknown")
+        return cls.create_notification(OP_CREATE, OPT_SUCCESS, OBJ_USER, login,
+                                       payload)
 
 
     @classmethod
     def delete_fail_collection(cls, payload):
-        """
-        The deletion of a collection failed, publish the message on MQTT
-        
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
         if 'meta' not in payload:
             payload['meta'] = {}
         if not payload_check(P_META_MSG, payload):
@@ -549,21 +384,9 @@ class Notification(Model):
                                                   payload, 
                                                   radon.cfg.sys_lib_user)
 
-        container = payload_check(P_OBJ_CONTAINER, payload, "/")
-        name = payload_check(P_OBJ_NAME, payload, "")
-        path = merge(container, name)
-
-        new = cls.new(
-            op_name=OP_DELETE,
-            op_type=OPT_FAIL,
-            obj_type=OBJ_COLLECTION,
-            obj_key=path,
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+        return cls.create_notification(OP_DELETE, OPT_FAIL, OBJ_COLLECTION, 
+                                       path, payload)
 
 
     @classmethod
@@ -583,20 +406,10 @@ class Notification(Model):
         payload['meta']['sender'] = payload_check(P_META_SENDER, 
                                                   payload, 
                                                   radon.cfg.sys_lib_user)
-        
-        name = payload_check(P_OBJ_NAME, payload, "Undefined")
-         
-        new = cls.new(
-            op_name=OP_DELETE,
-            op_type=OPT_FAIL,
-            obj_type=OBJ_GROUP,
-            obj_key=name,
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+
+        name = payload_check(P_OBJ_NAME, payload, "Unknown")
+        return cls.create_notification(OP_DELETE, OPT_FAIL, OBJ_GROUP, name,
+                                       payload)
 
 
     @classmethod
@@ -609,21 +422,9 @@ class Notification(Model):
                                                   payload, 
                                                   radon.cfg.sys_lib_user)
 
-        container = payload_check(P_OBJ_CONTAINER, payload, "/")
-        name = payload_check(P_OBJ_NAME, payload, "")
-        path = merge(container, name)
-
-        new = cls.new(
-            op_name=OP_DELETE,
-            op_type=OPT_FAIL,
-            obj_type=OBJ_RESOURCE,
-            obj_key=path,
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+        return cls.create_notification(OP_DELETE, OPT_FAIL, OBJ_RESOURCE, path,
+                                       payload)
 
 
     @classmethod
@@ -643,20 +444,11 @@ class Notification(Model):
         payload['meta']['sender'] = payload_check(P_META_SENDER, 
                                                   payload, 
                                                   radon.cfg.sys_lib_user)
-        
-        login = payload_check(P_OBJ_LOGIN, payload, "Undefined")
-         
-        new = cls.new(
-            op_name=OP_DELETE,
-            op_type=OPT_FAIL,
-            obj_type=OBJ_USER,
-            obj_key=login,
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+
+        login = payload_check(P_OBJ_LOGIN, payload, "Unknown")
+        return cls.create_notification(OP_DELETE, OPT_FAIL, OBJ_USER, login,
+                                       payload)
+
 
     @classmethod
     def delete_request_collection(cls, payload):
@@ -677,17 +469,9 @@ class Notification(Model):
             payload['meta']['msg'] = msg
             return cls.delete_fail_collection(payload)
 
-        new = cls.new(
-            op_name=OP_DELETE,
-            op_type=OPT_REQUEST,
-            obj_type=OBJ_COLLECTION,
-            obj_key=merge(payload['obj']['container'], payload['obj']['name']),
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+        return cls.create_notification(OP_DELETE, OPT_REQUEST, OBJ_COLLECTION, 
+                                       path, payload)
 
 
     @classmethod
@@ -714,17 +498,9 @@ class Notification(Model):
             payload['meta']['msg'] = msg
             return cls.delete_fail_group(payload)
 
-        new = cls.new(
-            op_name=OP_DELETE,
-            op_type=OPT_REQUEST,
-            obj_type=OBJ_GROUP,
-            obj_key=payload['obj']['name'],
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        name = payload_check(P_OBJ_NAME, payload, "Unknown")
+        return cls.create_notification(OP_DELETE, OPT_REQUEST, OBJ_GROUP, name,
+                                       payload)
 
 
     @classmethod
@@ -746,17 +522,9 @@ class Notification(Model):
             payload['meta']['msg'] = msg
             return cls.delete_fail_resource(payload)
 
-        new = cls.new(
-            op_name=OP_DELETE,
-            op_type=OPT_REQUEST,
-            obj_type=OBJ_RESOURCE,
-            obj_key=merge(payload['obj']['container'], payload['obj']['name']),
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+        return cls.create_notification(OP_DELETE, OPT_REQUEST, OBJ_RESOURCE, 
+                                       path, payload)
 
 
     @classmethod
@@ -783,17 +551,9 @@ class Notification(Model):
             payload['meta']['msg'] = msg
             return cls.delete_fail_user(payload)
 
-        new = cls.new(
-            op_name=OP_DELETE,
-            op_type=OPT_REQUEST,
-            obj_type=OBJ_USER,
-            obj_key=payload['obj']['login'],
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        login = payload_check(P_OBJ_LOGIN, payload, "Unknown")
+        return cls.create_notification(OP_DELETE, OPT_REQUEST, OBJ_USER, login,
+                                       payload)
 
 
     @classmethod
@@ -806,21 +566,9 @@ class Notification(Model):
                                                   payload, 
                                                   radon.cfg.sys_lib_user)
 
-        container = payload_check(P_OBJ_CONTAINER, payload, "/")
-        name = payload_check(P_OBJ_NAME, payload, "")
-        path = merge(container, name)
-
-        new = cls.new(
-            op_name=OP_DELETE,
-            op_type=OPT_SUCCESS,
-            obj_type=OBJ_COLLECTION,
-            obj_key=path,
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+        return cls.create_notification(OP_DELETE, OPT_SUCCESS, OBJ_COLLECTION, 
+                                       path, payload)
 
 
     @classmethod
@@ -839,18 +587,10 @@ class Notification(Model):
             msg = MSG_INFO_MISSING.format("group", ", ".join(missing))
             payload['meta']['msg'] = msg
             return cls.delete_fail_user(payload)
-        
-        new = cls.new(
-            op_name=OP_DELETE,
-            op_type=OPT_SUCCESS,
-            obj_type=OBJ_GROUP,
-            obj_key=payload_check(P_OBJ_NAME, payload),
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+
+        name = payload_check(P_OBJ_NAME, payload, "Unknown")
+        return cls.create_notification(OP_DELETE, OPT_SUCCESS, OBJ_GROUP, name,
+                                       payload)
 
 
     @classmethod
@@ -863,21 +603,9 @@ class Notification(Model):
                                                   payload, 
                                                   radon.cfg.sys_lib_user)
 
-        container = payload_check(P_OBJ_CONTAINER, payload, "/")
-        name = payload_check(P_OBJ_NAME, payload, "")
-        path = merge(container, name)
-
-        new = cls.new(
-            op_name=OP_DELETE,
-            op_type=OPT_SUCCESS,
-            obj_type=OBJ_RESOURCE,
-            obj_key=path,
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+        return cls.create_notification(OP_DELETE, OPT_SUCCESS, OBJ_RESOURCE, 
+                                           path, payload)
 
 
     @classmethod
@@ -896,18 +624,10 @@ class Notification(Model):
             msg = MSG_INFO_MISSING.format("user", ", ".join(missing))
             payload['meta']['msg'] = msg
             return cls.delete_fail_user(payload)
-        
-        new = cls.new(
-            op_name=OP_DELETE,
-            op_type=OPT_SUCCESS,
-            obj_type=OBJ_USER,
-            obj_key=payload_check(P_OBJ_LOGIN, payload),
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+
+        login = payload_check(P_OBJ_LOGIN, payload, "Unknown")
+        return cls.create_notification(OP_DELETE, OPT_SUCCESS, OBJ_USER, login,
+                                       payload)
 
 
     @classmethod
@@ -974,21 +694,9 @@ class Notification(Model):
                                                   payload, 
                                                   radon.cfg.sys_lib_user)
 
-        container = payload_check(P_OBJ_CONTAINER, payload, "/")
-        name = payload_check(P_OBJ_NAME, payload, "")
-        path = merge(container, name)
-
-        new = cls.new(
-            op_name=OP_UPDATE,
-            op_type=OPT_FAIL,
-            obj_type=OBJ_COLLECTION,
-            obj_key=path,
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+        return cls.create_notification(OP_UPDATE, OPT_FAIL, OBJ_COLLECTION, 
+                                       path, payload)
 
 
     @classmethod
@@ -1008,20 +716,10 @@ class Notification(Model):
         payload['meta']['sender'] = payload_check(P_META_SENDER, 
                                                   payload, 
                                                   radon.cfg.sys_lib_user)
-        
-        name = payload_check(P_OBJ_NAME, payload, "Undefined")
-         
-        new = cls.new(
-            op_name=OP_UPDATE,
-            op_type=OPT_FAIL,
-            obj_type=OBJ_GROUP,
-            obj_key=name,
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+
+        name = payload_check(P_OBJ_NAME, payload, "Unknown")
+        return cls.create_notification(OP_UPDATE, OPT_FAIL, OBJ_GROUP, name,
+                                       payload)
 
 
     @classmethod
@@ -1041,21 +739,9 @@ class Notification(Model):
                                                   payload, 
                                                   radon.cfg.sys_lib_user)
 
-        container = payload_check(P_OBJ_CONTAINER, payload, "/")
-        name = payload_check(P_OBJ_NAME, payload, "")
-        path = merge(container, name)
-
-        new = cls.new(
-            op_name=OP_UPDATE,
-            op_type=OPT_FAIL,
-            obj_type=OBJ_RESOURCE,
-            obj_key=path,
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+        return cls.create_notification(OP_UPDATE, OPT_FAIL, OBJ_RESOURCE, path,
+                                       payload)
 
 
     @classmethod
@@ -1075,20 +761,10 @@ class Notification(Model):
         payload['meta']['sender'] = payload_check(P_META_SENDER, 
                                                   payload, 
                                                   radon.cfg.sys_lib_user)
-        
-        login = payload_check(P_OBJ_LOGIN, payload, "Undefined")
-         
-        new = cls.new(
-            op_name=OP_UPDATE,
-            op_type=OPT_FAIL,
-            obj_type=OBJ_USER,
-            obj_key=login,
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+
+        login = payload_check(P_OBJ_LOGIN, payload, "Unknown")
+        return cls.create_notification(OP_UPDATE, OPT_FAIL, OBJ_USER, login,
+                                       payload)
 
 
     @classmethod
@@ -1120,17 +796,9 @@ class Notification(Model):
             payload['meta']['msg'] = msg
             return cls.update_fail_collection(payload)
 
-        new = cls.new(
-            op_name=OP_UPDATE,
-            op_type=OPT_REQUEST,
-            obj_type=OBJ_COLLECTION,
-            obj_key=merge(payload['obj']['container'], payload['obj']['name']),
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+        return cls.create_notification(OP_UPDATE, OPT_REQUEST, OBJ_COLLECTION, 
+                                       path, payload)
 
 
     @classmethod
@@ -1157,17 +825,9 @@ class Notification(Model):
             payload['meta']['msg'] = msg
             return cls.update_fail_group(payload)
 
-        new = cls.new(
-            op_name=OP_UPDATE,
-            op_type=OPT_REQUEST,
-            obj_type=OBJ_GROUP,
-            obj_key=payload['obj']['name'],
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        name = payload_check(P_OBJ_NAME, payload, "Unknown")
+        return cls.create_notification(OP_UPDATE, OPT_REQUEST, OBJ_GROUP, name,
+                                       payload)
 
 
     @classmethod
@@ -1199,17 +859,9 @@ class Notification(Model):
             payload['meta']['msg'] = msg
             return cls.update_fail_resource(payload)
 
-        new = cls.new(
-            op_name=OP_UPDATE,
-            op_type=OPT_REQUEST,
-            obj_type=OBJ_RESOURCE,
-            obj_key=merge(payload['obj']['container'], payload['obj']['name']),
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+        return cls.create_notification(OP_UPDATE, OPT_REQUEST, OBJ_RESOURCE, 
+                                       path, payload)
 
 
     @classmethod
@@ -1236,17 +888,9 @@ class Notification(Model):
             payload['meta']['msg'] = msg
             return cls.update_fail_user(payload)
 
-        new = cls.new(
-            op_name=OP_UPDATE,
-            op_type=OPT_REQUEST,
-            obj_type=OBJ_USER,
-            obj_key=payload['obj']['login'],
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        login = payload_check(P_OBJ_LOGIN, payload, "Unknown")
+        return cls.create_notification(OP_UPDATE, OPT_REQUEST, OBJ_USER, login,
+                                       payload)
 
 
     @classmethod
@@ -1268,17 +912,9 @@ class Notification(Model):
             payload['meta']['msg'] = msg
             return cls.update_fail_collection(payload)
 
-        new = cls.new(
-            op_name=OP_UPDATE,
-            op_type=OPT_SUCCESS,
-            obj_type=OBJ_COLLECTION,
-            obj_key=merge(payload['pre']['container'], payload['pre']['name']),
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+        return cls.create_notification(OP_UPDATE, OPT_SUCCESS, OBJ_COLLECTION, 
+                                       path, payload)
 
 
     @classmethod
@@ -1298,18 +934,10 @@ class Notification(Model):
                 ", ".join(missing))
             payload['meta']['msg'] = msg
             return cls.update_fail_group(payload)
-        
-        new = cls.new(
-            op_name=OP_UPDATE,
-            op_type=OPT_SUCCESS,
-            obj_type=OBJ_GROUP,
-            obj_key=payload_check(P_PRE_NAME, payload),
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+
+        name = payload_check(P_OBJ_NAME, payload, "Unknown")
+        return cls.create_notification(OP_UPDATE, OPT_SUCCESS, OBJ_GROUP, name,
+                                       payload)
 
 
     @classmethod
@@ -1331,17 +959,9 @@ class Notification(Model):
             payload['meta']['msg'] = msg
             return cls.update_fail_resource(payload)
 
-        new = cls.new(
-            op_name=OP_UPDATE,
-            op_type=OPT_SUCCESS,
-            obj_type=OBJ_RESOURCE,
-            obj_key=merge(payload['pre']['container'], payload['pre']['name']),
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
+        path = payload_check(P_OBJ_PATH, payload, "Unknown")
+        return cls.create_notification(OP_UPDATE, OPT_SUCCESS, OBJ_RESOURCE, 
+                                       path, payload)
 
 
     @classmethod
@@ -1360,20 +980,9 @@ class Notification(Model):
             msg = MSG_INFO_MISSING.format("user", ", ".join(missing))
             payload['meta']['msg'] = msg
             return cls.update_fail_user(payload)
-        
-        new = cls.new(
-            op_name=OP_UPDATE,
-            op_type=OPT_SUCCESS,
-            obj_type=OBJ_USER,
-            obj_key=payload_check("/pre/login", payload),
-            sender=payload['meta']['sender'],
-            processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
-        )
-        new.mqtt_publish()
-        return new
 
-
-
+        login = payload_check(P_OBJ_LOGIN, payload, "Unknown")
+        return cls.create_notification(OP_UPDATE, OPT_SUCCESS, OBJ_USER, login,
+                                       payload)
 
 

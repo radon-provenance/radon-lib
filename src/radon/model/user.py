@@ -143,22 +143,17 @@ class User(Model):
         else:
             sender = radon.cfg.sys_lib_user
         kwargs["password"] = encrypt_password(kwargs["password"])
+        payload = {'meta' : {'sender': sender}}
 
         if cls.objects.filter(login=kwargs["login"]).count():
-            Notification.create_fail_user(sender, 
-                                          kwargs["login"],
-                                          "User already exists")
+            payload['obj'] = {'login' : kwargs.get("login", "Unknown")}
+            payload['meta']['msg'] = "User already exists"
+            Notification.create_fail_user(payload)
             return None
 
         user = super(User, cls).create(**kwargs)
 
-
-        payload = {
-            "obj": user.mqtt_get_state(),
-            'meta' : {
-                "sender": sender
-            }
-        }
+        payload['obj'] = user.mqtt_get_state()
         Notification.create_success_user(payload)
         return user
 

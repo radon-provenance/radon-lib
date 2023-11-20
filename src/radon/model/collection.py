@@ -116,25 +116,30 @@ class Collection(object):
             container = container + '/'
             
         path = merge(container, name)
+
+        if not sender:
+            sender = radon.cfg.sys_lib_user
+
+        payload = {'meta' : {'sender': sender}}
  
         # Check if parent collection exists
         parent = Collection.find(container)
         if parent is None:
-            Notification.create_fail_collection(sender, 
-                                                path,
-                                                "Parent container doesn't exist")
+            payload['obj'] = {'path' : path}
+            payload['meta']['msg'] = "Parent container doesn't exist"
+            Notification.create_fail_collection(payload)
             return None
         resource = Resource.find(merge(container, name))
         if resource is not None:
-            Notification.create_fail_collection(sender, 
-                                                path,
-                                                "Conflict with a resource")
+            payload['obj'] = {'path' : path}
+            payload['meta']['msg'] = "Conflict with a resource"
+            Notification.create_fail_collection(payload)
             return None
         collection = Collection.find(path)
         if collection is not None:
-            Notification.create_fail_collection(sender, 
-                                                path,
-                                                "Conflict with a collection")
+            payload['obj'] = {'path' : path}
+            payload['meta']['msg'] = "Conflict with a collection"
+            Notification.create_fail_collection(payload)
             return None
 
         now_date = now()
@@ -153,21 +158,13 @@ class Collection(object):
             user_meta=user_meta,
             sys_meta=sys_meta
         )
-        if not sender:
-            sender = radon.cfg.sys_lib_user
         
         new = cls(coll_node)
         
         if read_access or write_access:
             new.create_acl_list(read_access, write_access)
         
-        payload = {
-            "obj": new.mqtt_get_state(),
-            'meta' : {
-                "sender": sender
-            }
-        }
-        
+        payload['obj'] = new.mqtt_get_state()
         Notification.create_success_collection(payload)
         return new
 
