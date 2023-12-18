@@ -19,7 +19,7 @@ from dse.cqlengine import columns, connection
 from dse.query import SimpleStatement
 from dse.cqlengine.models import Model
 
-import radon
+from radon.model.config import cfg
 from radon.util import default_cdmi_id
 
 
@@ -163,7 +163,7 @@ class DataObject(Model):
         :type uuid: str
         """
         session = connection.get_session()
-        keyspace = radon.cfg.dse_keyspace
+        keyspace = cfg.dse_keyspace
         session.set_keyspace(keyspace)
         query = SimpleStatement("""DELETE FROM data_object WHERE uuid=%s""")
         session.execute(query, (uuid,))
@@ -196,7 +196,7 @@ class DataObject(Model):
         :return: An URL that informs that the data is in Cassandra + the UUID
         :rtype: str
         """
-        return radon.cfg.protocol_cassandra + self.uuid
+        return cfg.protocol_cassandra + self.uuid
 
 
 

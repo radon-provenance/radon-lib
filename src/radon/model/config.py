@@ -15,14 +15,13 @@
 
 import os
 
+from dotenv import load_dotenv
 
 from dse.cqlengine import columns
 from dse.cqlengine.models import connection, Model
 from dse.query import SimpleStatement
 
-
 from radon.log import init_logger
-import radon
 
 
 
@@ -300,7 +299,12 @@ class Config(Model):
         for field in cfg_fields:
             list_index.append((field.key, field.value))
         return list_index
-   
+
+
+# Load environment variables to initialize config with the user-defined value
+# if they exist
+load_dotenv()
+cfg = LocalConfig()
 
 
 

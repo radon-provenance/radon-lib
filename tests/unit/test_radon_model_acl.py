@@ -17,7 +17,6 @@ limitations under the License.
 import pytest
 import json
 
-import radon.model.acl as acl
 from radon.model.acl import (
     aceflag_to_cdmi_str,
     acemask_to_cdmi_str,
@@ -29,11 +28,9 @@ from radon.model.acl import (
     serialize_acl_metadata,
     str_to_acemask,
 )
-from radon import cfg
-from radon.model import (
-    Collection,
-    Group
-)
+from radon.model.config import cfg
+from radon.model.collection import Collection
+from radon.model.group import Group
 from radon.database import (
     connect,
     destroy,

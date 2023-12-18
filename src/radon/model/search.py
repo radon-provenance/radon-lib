@@ -16,14 +16,10 @@
 from dse.cqlengine import connection
 from dse import InvalidRequest
 
-import radon
-from radon.model import (
-    Collection,
-    Resource
-)
-from radon.util import (
-    merge
-)
+from radon.model.config import cfg
+from radon.model.collection import Collection
+from radon.model.resource import Resource
+from radon.util import merge
 
 class Search(object):
     """Search functionalities
@@ -38,7 +34,7 @@ class Search(object):
         query = """SELECT * FROM tree_node where {}""".format(solr_query)
         
         cluster = connection.get_cluster()
-        session = cluster.connect(radon.cfg.dse_keyspace)
+        session = cluster.connect(cfg.dse_keyspace)
         try:
             rows = session.execute(query)
         except InvalidRequest:

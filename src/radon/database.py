@@ -28,16 +28,12 @@ from dse import InvalidRequest
 from dse.policies import WhiteListRoundRobinPolicy
 import time
 
-from radon import cfg
-from radon.model import (
-    Collection,
-    Config,
-    DataObject,
-    Group,
-    Notification,
-    TreeNode,
-    User
-)
+from radon.model.collection import Collection
+from radon.model.data_object import DataObject
+from radon.model.group import Group
+from radon.model.resource import Resource
+from radon.model.tree_node import TreeNode
+from radon.model.user import User
 from radon.model.errors import (
     GroupConflictError,
     UserConflictError,
@@ -45,7 +41,18 @@ from radon.model.errors import (
 from radon.model.config import (
     MODULE_SEARCH,
     FIELD_TYPE_TEXT,
-    OPTION_FIELD_META
+    OPTION_FIELD_META,
+    cfg,
+    Config
+)
+from radon.model.notification import (
+    create_request_group,
+    create_request_user,
+    Notification
+)
+from radon.model.payload import (
+    PayloadCreateRequestGroup,
+    PayloadCreateRequestUser
 )
 
 def add_search_field(name, type):
@@ -133,12 +140,18 @@ def create_default_users():
     
     """
     for name in cfg.default_groups:
-        try:
-            Group.create(name=name)
-        except GroupConflictError:
-            pass
+        payload_json = {
+            "obj": { 
+                "name": name
+            },
+            "meta": {
+                "sender": "radon-lib"
+            }
+        }
+        create_request_group(PayloadCreateRequestGroup(payload_json))
+
     for login, fullname, email, pwd, is_admin, groups in cfg.default_users:
-        payload = {
+        payload_json = {
                 "obj": { 
                     "login": login,
                     "password": pwd,
@@ -151,7 +164,7 @@ def create_default_users():
                     "sender": "radon-lib"
                 }
             }
-        Notification.create_request_user(payload)
+        create_request_user(PayloadCreateRequestUser(payload_json))
 
 
 def create_root():

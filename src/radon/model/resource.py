@@ -21,12 +21,9 @@ from abc import (
     abstractmethod
 )
 
-import radon
-from radon.model import (
-    DataObject,
-    Notification,
-    TreeNode,
-)
+from radon.model.config import cfg
+from radon.model.data_object import DataObject
+from radon.model.tree_node import TreeNode
 from radon.model.acl import (
     acemask_to_str,
     acl_cdmi_to_cql,
@@ -35,6 +32,18 @@ from radon.model.acl import (
 from radon.model.errors import (
     NoSuchCollectionError,
     ResourceConflictError
+)
+from radon.model.notification import (
+    create_fail_resource,
+    create_success_resource,
+    delete_success_resource,
+    update_success_resource
+)
+from radon.model.payload import (
+    PayloadCreateFailResource,
+    PayloadCreateSuccessResource,
+    PayloadDeleteSuccessResource,
+    PayloadUpdateSuccessResource
 )
 from radon.util import (
     datetime_serializer,
@@ -122,8 +131,7 @@ class Resource(ABC):
         :return: The new Resource object
         :rtype: :class:`radon.model.Resource`
         """
-        from radon.model import Collection
-        from radon.model import Notification
+        from radon.model.collection import Collection
         if not container.endswith('/'):
             container += '/'
  
@@ -131,23 +139,19 @@ class Resource(ABC):
         path = merge(container, name)
 
         if not sender:
-            sender = radon.cfg.sys_lib_user
-
-        payload = {'meta' : {'sender': sender}}
+            sender = cfg.sys_lib_user
         
         existing = cls.find(path)
         if existing:
-            payload['obj'] = {'path' : path}
-            payload['meta']['msg'] = "Conflict with a resource"
-            Notification.create_fail_resource(payload)
+            create_fail_resource(PayloadCreateFailResource.default(
+                path, "Conflict with a resource", sender))
             return None
             
         # Check if parent collection exists
         parent = Collection.find(container)
         if parent is None:
-            payload['obj'] = {'path' : path}
-            payload['meta']['msg'] = "Parent container doesn't exist"
-            Notification.create_fail_resource(payload)
+            create_fail_resource(PayloadCreateFailResource.default(
+                path, "Parent container doesn't exist", sender))
             return None
 
         now_date = now()
@@ -159,17 +163,17 @@ class Resource(ABC):
                 user_meta[k] = encode_meta(metadata[k])
         
         sys_meta = {
-            radon.cfg.meta_create_ts: encode_meta(now_date),
-            radon.cfg.meta_modify_ts: encode_meta(now_date)
+            cfg.meta_create_ts: encode_meta(now_date),
+            cfg.meta_modify_ts: encode_meta(now_date)
         }
         
         if mimetype:
-            sys_meta[radon.cfg.meta_mimetype] = mimetype
+            sys_meta[cfg.meta_mimetype] = mimetype
         if size:
-            sys_meta[radon.cfg.meta_size] = str(size)
+            sys_meta[cfg.meta_size] = str(size)
 
         if not url:
-            url = "{}{}".format(radon.cfg.protocol_cassandra,
+            url = "{}{}".format(cfg.protocol_cassandra,
                                 default_cdmi_id())
             
         resc_node = TreeNode.create(
@@ -181,17 +185,22 @@ class Resource(ABC):
             is_object=True,
         )
 
-        if url.startswith(radon.cfg.protocol_cassandra):
+        if url.startswith(cfg.protocol_cassandra):
             new = RadonResource(resc_node)
         else:
             new = UrlLibResource(resc_node)
         
         if read_access or write_access:
             new.create_acl_list(read_access, write_access)
-        
-        payload["obj"] = new.mqtt_get_state()
-        
-        Notification.create_success_resource(payload)
+
+        payload_json = {
+            "obj": new.mqtt_get_state(),
+            'meta' : {
+                "sender": sender
+            }
+        }
+        create_success_resource(PayloadCreateSuccessResource(payload_json))
+
         return new
 
 
@@ -218,18 +227,16 @@ class Resource(ABC):
             sender = kwargs['sender']
             del kwargs['sender']
         else:
-            sender = radon.cfg.sys_lib_user
+            sender = cfg.sys_lib_user
 
-        payload = {
-            "obj": self.mqtt_get_state(),
-            'meta' : {
-                "sender": sender
-            }
+        payload_json = {
+            "obj": {"path": self.path},
+            'meta' : {"sender": sender}
         }
-        
+
         self.node.delete()
-        
-        Notification.delete_success_resource(payload)
+
+        delete_success_resource(PayloadDeleteSuccessResource(payload_json))
 
 
     @classmethod
@@ -328,7 +335,7 @@ class Resource(ABC):
                 write_access.append(gid)
             else:
                 # Unknown combination
-                radon.cfg.logger.warning(
+                cfg.logger.warning(
                     "The acemask for group {0} on resource {1} is invalid".format(
                         gid,
                         self.path
@@ -356,7 +363,7 @@ class Resource(ABC):
         # defined at this level
         acl = self.get_acl_dict()
         if not acl:
-            from radon.model import Collection
+            from radon.model.collection import Collection
             parent_container = Collection.find(self.container)
             return parent_container.get_authorized_actions(user)
         actions = set([])
@@ -405,7 +412,7 @@ class Resource(ABC):
         :return: The timestamp stored in the system metadata
         :rtype: datetime
         """
-        return self.node.sys_meta.get(radon.cfg.meta_create_ts)
+        return self.node.sys_meta.get(cfg.meta_create_ts)
 
 
     def get_list_sys_meta(self):
@@ -417,7 +424,7 @@ class Resource(ABC):
         :return: a list of pairs (name, value)
         :rtype: list
         """
-        return metadata_to_list(self.node.sys_meta, radon.cfg.vocab_dict)
+        return metadata_to_list(self.node.sys_meta, cfg.vocab_dict)
 
 
     def get_list_user_meta(self):
@@ -439,7 +446,7 @@ class Resource(ABC):
         :return: The timestamp stored in the system metadata
         :rtype: datetime
         """
-        return self.node.sys_meta.get(radon.cfg.meta_modify_ts)
+        return self.node.sys_meta.get(cfg.meta_modify_ts)
 
 
     def get_mimetype(self):
@@ -449,7 +456,7 @@ class Resource(ABC):
         :return: The mimetype
         :rtype: str
         """
-        return self.node.sys_meta.get(radon.cfg.meta_mimetype, "")
+        return self.node.sys_meta.get(cfg.meta_mimetype, "")
 # 
 #     def get_metadata(self):
 #         if self.is_reference:
@@ -585,7 +592,7 @@ class Resource(ABC):
         :rtype: dict
         """
         data = {
-            "id": self.uuid,
+            "uuid": self.uuid,
             "name": self.get_name(),
             "container": self.container,
             "path": self.path,
@@ -623,7 +630,6 @@ class Resource(ABC):
         :param mimetype: The mimetype of the resource
         :type mimetype: str, optional
         """
-        from radon.model import Notification
  
         pre_state = self.mqtt_get_state()
         now_date = now()
@@ -637,10 +643,10 @@ class Resource(ABC):
             kwargs["user_meta"] = meta_cdmi_to_cassandra(kwargs["user_meta"])
         
         sys_meta = self.node.sys_meta
-        sys_meta[radon.cfg.meta_modify_ts] = encode_meta(now_date)
+        sys_meta[cfg.meta_modify_ts] = encode_meta(now_date)
         kwargs["sys_meta"] = sys_meta
         if "mimetype" in kwargs:
-            sys_meta[radon.cfg.meta_mimetype] = kwargs["mimetype"]
+            sys_meta[cfg.meta_mimetype] = kwargs["mimetype"]
             del kwargs["mimetype"]
             
 
@@ -675,14 +681,12 @@ class Resource(ABC):
         post_state = resc.mqtt_get_state()
         
         if (pre_state != post_state):
-            payload = {
-                "pre" : pre_state,
-                "post": post_state,
-                "meta": {
-                    "sender": sender
-                    }
+            payload_json = {
+                "obj" : pre_state,
+                "new": post_state,
+                "meta": {"sender": sender}
             }
-            Notification.update_success_resource(payload)
+            update_success_resource(PayloadUpdateSuccessResource(payload_json))
         return self
 
 
@@ -786,7 +790,7 @@ class RadonResource(Resource):
         :type node: :class:`radon.model.TreeNode`
         """
         Resource.__init__(self, node)
-        self.obj_id = self.url.replace(radon.cfg.protocol_cassandra, "")
+        self.obj_id = self.url.replace(cfg.protocol_cassandra, "")
         self.obj = DataObject.find(self.obj_id)
 
 
@@ -867,16 +871,16 @@ class RadonResource(Resource):
         """
         if not (hasattr(fh, 'read')):
             data = fh
-            do = DataObject.create(data, compressed=radon.cfg.compress_do)
+            do = DataObject.create(data, compressed=cfg.compress_do)
         else:
-            chunk = fh.read(radon.cfg.chunk_size)
-            do = DataObject.create(chunk, compressed=radon.cfg.compress_do)
+            chunk = fh.read(cfg.chunk_size)
+            do = DataObject.create(chunk, compressed=cfg.compress_do)
             seq_num = 1
             while True:
-                chunk = fh.read(radon.cfg.chunk_size)
+                chunk = fh.read(cfg.chunk_size)
                 if not chunk:
                     break
-                DataObject.append_chunk(do.uuid, seq_num, chunk, radon.cfg.compress_do)
+                DataObject.append_chunk(do.uuid, seq_num, chunk, cfg.compress_do)
                 do.size += len(chunk)
                 seq_num += 1
         self.obj = do

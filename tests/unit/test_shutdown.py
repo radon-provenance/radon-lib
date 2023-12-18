@@ -21,19 +21,21 @@ import tempfile
 from cli_test_helpers import ArgvContext, EnvironContext
 from unittest.mock import patch
   
+from radon.model.config import cfg
 import radon.cli
 
 
 
 SESSION_PATH = os.path.join(os.path.expanduser("~/.radon"), "session.pickle")
 
+TEST_KEYSPACE = "test_keyspace"
 
 def test():
     #####################
     ## Create Database ##
     #####################
     
-    radon.cfg.dse_keyspace = "temp_radon"
+    cfg.dse_keyspace = TEST_KEYSPACE
     
     app = radon.cli.RadonApplication(SESSION_PATH)
     app.init()

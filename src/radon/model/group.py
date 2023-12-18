@@ -17,8 +17,19 @@ from dse.cqlengine import columns
 from dse.cqlengine.models import Model
 import json
 
-import radon
-from radon.model import Notification
+from radon.model.config import cfg
+from radon.model.notification import (
+    create_fail_group,
+    create_success_group,
+    delete_success_group,
+    update_success_group
+)
+from radon.model.payload import (
+    PayloadCreateFailGroup,
+    PayloadCreateSuccessGroup,
+    PayloadDeleteSuccessGroup,
+    PayloadUpdateSuccessGroup
+)
 from radon.model.errors import GroupConflictError
 from radon.util import (
     datetime_serializer,
@@ -77,7 +88,7 @@ class Group(Model):
         :return: 3 lists to summarize what happened
         :rtype: Tuple[List[str],List[str],List[str]]
         """
-        from radon.model import User
+        from radon.model.user import User
  
         added = []
         not_added = []
@@ -114,32 +125,24 @@ class Group(Model):
             sender = kwargs["sender"]
             del kwargs["sender"]
         else:
-            sender = radon.cfg.sys_lib_user
+            sender = cfg.sys_lib_user
         # Make sure name id not in use.
         if cls.objects.filter(name=kwargs["name"]).count():
-            
-            payload = {
-                "obj": {
-                    "name" : kwargs["name"]
-                },
-                'meta' : {
-                    "sender": sender,
-                    "msg": "Group already exists"
-                }
-            }
-            Notification.create_fail_group(payload)
+            payload = PayloadCreateFailGroup.default(
+                kwargs["name"], "Group already exists", sender)
+            create_fail_group(payload)
             return None
         
         group = super(Group, cls).create(**kwargs)
         
-        payload = {
+        payload_json = {
             "obj": group.mqtt_get_state(),
             'meta' : {
                 "sender": sender
             }
         }
-        
-        Notification.create_success_group(payload)
+        create_success_group(PayloadCreateSuccessGroup(payload_json))
+
         return group
 
 
@@ -151,13 +154,11 @@ class Group(Model):
         :param sender: the name of the user who made the action
         :type sender: str, optional
         """
-        from radon.model import User
- 
-        payload = {
-            "obj": self.mqtt_get_state(),
-            'meta' : {
-                "sender": sender
-            }
+        from radon.model.user import User
+
+        payload_json = {
+            "obj": {"name": self.name},
+            'meta' : {"sender": sender}
         }
 
         for u in User.objects.all():
@@ -165,8 +166,8 @@ class Group(Model):
                 u.groups.remove(self.name)
                 u.save()
         super(Group, self).delete()
-        
-        Notification.delete_success_group(payload)
+
+        delete_success_group(PayloadDeleteSuccessGroup(payload_json))
 
  
     @classmethod
@@ -209,7 +210,7 @@ class Group(Model):
         # through all of the Users but the __in suffix for
         # queries won't let me query all users where this
         # objects ID appears in the User group field.
-        from radon.model import User
+        from radon.model.user import User
  
         return [
             u.login for u in User.objects.all() if u.active and self.name in u.groups
@@ -287,7 +288,7 @@ class Group(Model):
         :return: 3 lists to summarize what happened
         :rtype: Tuple[List[str],List[str],List[str]]
         """
-        from radon.model import User
+        from radon.model.user import User
  
         not_exist = []
         removed = []
@@ -333,7 +334,7 @@ class Group(Model):
             sender = kwargs['sender']
             del kwargs['sender']
         else:
-            sender = radon.cfg.sys_lib_user
+            sender = cfg.sys_lib_user
             
         if "members" in kwargs:
             members = kwargs['members']
@@ -353,14 +354,12 @@ class Group(Model):
         
         post_state = group.mqtt_get_state()
         if (pre_state != post_state):
-            payload = {
-                "pre" : pre_state,
-                "post": post_state,
-                "meta": {
-                    "sender": sender
-                    }
+            payload_json = {
+                "obj" : pre_state,
+                "new": post_state,
+                "meta": {"sender": sender}
             }
-            Notification.update_success_group(payload)
+            update_success_group(PayloadUpdateSuccessGroup(payload_json))
         return self
 
 

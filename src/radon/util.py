@@ -32,7 +32,7 @@ import struct
 import uuid
 import ldap
 
-import radon
+from radon.model.config import cfg
 
 
 IDENT_PEN = 42223
@@ -289,7 +289,7 @@ def is_collection(path):
      :return: a boolean
      :rtype: bool
      """
-    from radon.model import Collection
+    from radon.model.collection import Collection
     return Collection.find(path) is not None
 
 
@@ -304,7 +304,7 @@ def is_reference(url):
      :rtype: bool
     """
     if url:
-        return not url.startswith(radon.cfg.protocol_cassandra)
+        return not url.startswith(cfg.protocol_cassandra)
     else:
         return False
 
@@ -318,7 +318,7 @@ def is_resource(path):
      :return: a boolean
      :rtype: bool
     """
-    from radon.model import Resource
+    from radon.model.resource import Resource
     return Resource.find(path) is not None
 
 
@@ -348,7 +348,7 @@ def mk_cassandra_url(obj_uuid):
     :return: The URL
     :rtype: str
     """
-    return radon.cfg.protocol_cassandra + obj_uuid 
+    return cfg.protocol_cassandra + obj_uuid 
  
  
 def merge(coll_name, resc_name):
@@ -439,7 +439,7 @@ def metadata_to_list(metadata, vocab_dict=None):
             # If we use vocab_dict to pretty print display we also
             # deserialize date times
             str_v = decode_meta(v)
-            if k in radon.cfg.meta_datetimes:
+            if k in cfg.meta_datetimes:
                 try:
                     d = datetime.strptime(str_v, "%Y-%m-%dT%H:%M:%S.%f%z")
                     str_v = d.strftime("%A %d %B %Y - %H:%M:%S (%z)")
@@ -471,6 +471,24 @@ def path_exists(path):
     return is_resource(path) or is_collection(path)
 
 
+def payload_add(payload, path, value):
+    """Add a value and the needed keys for a specific key, payload dict *will*
+    be modified
+    If an element in the path is not a dictionary it will lost its value"""
+    d = payload
+    ls_elem = [x for x in path.split('/') if x]
+    last = ls_elem[-1]
+    for elem in ls_elem[:-1]:
+        if elem not in d or not isinstance(d[elem], dict):
+            d[elem] = {}
+        d = d[elem]
+    try:
+        d[last] = value
+    except TypeError:
+        d[last] = {last, }
+    
+
+
 def payload_check(path, payload, default_value=None):
     """Check for a specific value in a json payload
     { 
@@ -500,7 +518,7 @@ def payload_check(path, payload, default_value=None):
         obj = payload
         ls_elem = [x for x in path.split('/') if x] 
         for elem in ls_elem:
-             obj = obj[elem]
+            obj = obj[elem]
         return obj
              
     except KeyError:
@@ -559,8 +577,8 @@ def verify_ldap_password(username, password):
     ldap server
     :rtype: bool
     """
-    server_uri = radon.cfg.auth_ldap_server_uri
-    dn_template = radon.cfg.auth_ldap_user_dn_template
+    server_uri = cfg.auth_ldap_server_uri
+    dn_template = cfg.auth_ldap_user_dn_template
     
     if server_uri is None:
         return False 

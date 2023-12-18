@@ -17,9 +17,9 @@ limitations under the License.
 import os
 import pytest
 
-from radon import cfg
-from radon import LocalConfig
 from radon.model.config import (
+    cfg,
+    LocalConfig,
     DEFAULT_DSE_HOST,
     DEFAULT_DSE_KEYSPACE,
     DEFAULT_DSE_STRATEGY,

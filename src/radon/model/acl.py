@@ -24,8 +24,7 @@ from dse.cqlengine.usertype import UserType
 from dse.cqlengine import columns
 from collections import OrderedDict
 
-import radon
-from radon.model import Group
+from radon.model.config import cfg
 
 
 # ACE Flags for ACL in CDMI
@@ -253,13 +252,14 @@ def acl_cdmi_to_cql(cdmi_acl):
     :return: A CQL string that can be used to update values in Cassandra
     :rtype: str
     """
+    from radon.model.group import Group
     ls_access = []
     for cdmi_ace in cdmi_acl:
         if 'identifier' in cdmi_ace:
             gid = cdmi_ace['identifier']
         else:
             # Wrong syntax for the ace
-            radon.cfg.logger.warning(
+            cfg.logger.warning(
                 "Wrong format for the cdmi string for ACL, 'identifier' field not found"
             )
             continue
@@ -271,7 +271,7 @@ def acl_cdmi_to_cql(cdmi_acl):
         elif gid.upper() == "ANONYMOUS@":
             ident = "ANONYMOUS@"
         else:
-            radon.cfg.logger.warning(
+            cfg.logger.warning(
                 "Wrong format for the cdmi string for ACL, {} group not found".format(
                     gid)
             )
@@ -304,6 +304,7 @@ def acl_list_to_cql(read_access, write_access):
     :return: A CQL string that can be used to update values in Cassandra
     :rtype: str
     """
+    from radon.model.group import Group
     access = {}
     for gname in read_access:
         access[gname] = ACCESS_STR_READ
@@ -322,7 +323,7 @@ def acl_list_to_cql(read_access, write_access):
         elif gname.upper() == "ANONYMOUS@":
             ident = "ANONYMOUS@"
         else: 
-            radon.cfg.logger.warning(
+            cfg.logger.warning(
                 "The group {0} doesn't exist".format(
                     gname
                 )
@@ -391,7 +392,7 @@ def serialize_acl_metadata(obj):
     :param obj: A Collection or a resource
     :type obj: :class:`radon.model.Collection` or :class:`radon.model.Resource`
     """
-    from radon.model import Resource
+    from radon.model.resource import Resource
     is_object = isinstance(obj, Resource)
     mapped_md = []
     # Create a list of ACE from the dictionary we created

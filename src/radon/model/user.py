@@ -17,10 +17,19 @@ from dse.cqlengine import columns
 from dse.cqlengine.models import Model
 import json
 
-import radon
-from radon.model import (
-    Group,
-    Notification
+from radon.model.config import cfg
+from radon.model.group import Group
+from radon.model.notification import (
+    create_fail_user,
+    create_success_user,
+    delete_success_user,
+    update_success_user
+)
+from radon.model.payload import (
+    PayloadCreateFailUser,
+    PayloadCreateSuccessUser,
+    PayloadDeleteSuccessResource,
+    PayloadUpdateSuccessUser
 )
 from radon.model.errors import UserConflictError
 from radon.util import (
@@ -141,20 +150,24 @@ class User(Model):
             sender = kwargs["sender"]
             del kwargs["sender"]
         else:
-            sender = radon.cfg.sys_lib_user
+            sender = cfg.sys_lib_user
         kwargs["password"] = encrypt_password(kwargs["password"])
-        payload = {'meta' : {'sender': sender}}
 
         if cls.objects.filter(login=kwargs["login"]).count():
-            payload['obj'] = {'login' : kwargs.get("login", "Unknown")}
-            payload['meta']['msg'] = "User already exists"
-            Notification.create_fail_user(payload)
+            payload = PayloadCreateFailUser.default(
+                kwargs.get("login", "Unknown"), "User already exists", sender)
+            create_fail_user(payload)
             return None
 
         user = super(User, cls).create(**kwargs)
 
-        payload['obj'] = user.mqtt_get_state()
-        Notification.create_success_user(payload)
+        payload_json = {
+            "obj": user.mqtt_get_state(),
+            'meta' : {
+                "sender": sender
+            }
+        }
+        create_success_user(PayloadCreateSuccessUser(payload_json))
         return user
 
     @classmethod
@@ -182,18 +195,17 @@ class User(Model):
             sender = kwargs['sender']
             del kwargs['sender']
         else:
-            sender = radon.cfg.sys_lib_user
-            
-        payload = {
-            "obj": self.mqtt_get_state(),
-            'meta' : {
-                "sender": sender
-            }
+            sender = cfg.sys_lib_user
+
+        payload_json = {
+            "obj": {"login": self.mqtt_get_state()},
+            'meta' : {"sender": sender}
         }
+
         super(User, self).delete()
-        
-        Notification.delete_success_user(payload)
-        
+
+        delete_success_user(PayloadDeleteSuccessResource(payload_json))
+
 
     @classmethod
     def find(cls, login):
@@ -319,7 +331,7 @@ class User(Model):
 
         if "login" in kwargs:
             del kwargs["login"]
-        sender = radon.cfg.sys_lib_user
+        sender = cfg.sys_lib_user
         if "sender" in kwargs:
             sender = kwargs['sender']
             del kwargs['sender']
@@ -329,14 +341,12 @@ class User(Model):
         post_state = user.mqtt_get_state()
         
         if (pre_state != post_state):
-            payload = {
-                "pre" : pre_state,
-                "post": post_state,
-                "meta": {
-                    "sender": sender
-                    }
+            payload_json = {
+                "obj" : pre_state,
+                "new": post_state,
+                "meta": {"sender": sender}
             }
-            Notification.update_success_user(payload)
+            update_success_user(PayloadUpdateSuccessUser(payload_json))
         return self
 
 

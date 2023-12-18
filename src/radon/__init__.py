@@ -13,15 +13,6 @@
 # limitations under the License.
 
 
-from dotenv import load_dotenv
-
-from radon.model import LocalConfig
-
 __version__ = "1.1.0"
-
-# Load environment variables to initialize config with the user-defined value
-# if they exist
-load_dotenv()
-cfg = LocalConfig()
 
 

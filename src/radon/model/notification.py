@@ -20,7 +20,7 @@ import json
 import logging
 import paho.mqtt.publish as publish
  
-import radon
+from radon.model.config import cfg
 from radon.util import (
     datetime_serializer,
     default_date,
@@ -29,6 +29,21 @@ from radon.util import (
     last_x_days,
     merge,
     payload_check,
+)
+
+from radon.model.payload import (
+    PayloadCreateFailCollection,
+    PayloadCreateFailGroup,
+    PayloadCreateFailResource,
+    PayloadCreateFailUser,
+    PayloadDeleteFailCollection,
+    PayloadDeleteFailGroup,
+    PayloadDeleteFailResource,
+    PayloadDeleteFailUser,
+    PayloadUpdateFailCollection,
+    PayloadUpdateFailGroup,
+    PayloadUpdateFailResource,
+    PayloadUpdateFailUser
 )
 
 # Operations that could lead to a new notification
@@ -49,20 +64,9 @@ OBJ_COLLECTION = "collection"  # path
 OBJ_USER = "user"              # name
 OBJ_GROUP = "group"            # name
 
-P_META_MSG = "/meta/msg"
-P_META_SENDER = "/meta/sender"
-P_OBJ_CONTAINER = "/obj/container"
-P_OBJ_NAME = "/obj/name"
-P_OBJ_PATH = "/obj/path"
-P_OBJ_LOGIN = "/obj/login"
-P_PRE_NAME = "/pre/name"
-P_PRE_CONTAINER = "/pre/container"
 
-MSG_CREATE_FAILED = "Create failed"
-MSG_UPDATE_FAILED = "update Failed"
-MSG_DELETE_FAILED = "Delete failed"
-MSG_INFO_MISSING = "Information is missing for the {}: {}"
-
+MSG_SUCCESS_PAYLOAD_PROBLEM_DELETE = "Object deleted but success message not valid"
+MSG_SUCCESS_PAYLOAD_PROBLEM_CREATE = "Object created but success message not valid"
 
 
 class Notification(Model):
@@ -134,7 +138,7 @@ class Notification(Model):
         topic = topic.replace("#", "").replace("+", "")
         logging.info(u'Publishing on topic "{0}"'.format(topic))
         try:
-            publish.single(topic, self.payload, hostname=radon.cfg.mqtt_host)
+            publish.single(topic, self.payload, hostname=cfg.mqtt_host)
         except (KeyboardInterrupt, SystemExit):
             raise
         except:
@@ -162,472 +166,19 @@ class Notification(Model):
         return data
 
 
-
-###################
-## Class Methods ##
-###################
-
-
-
     @classmethod
-    def create_fail_collection(cls, payload):
-        """
-        The creation of a collection failed, publish the message on MQTT        
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        if not payload_check(P_META_MSG, payload):
-            payload['meta']['msg'] = MSG_CREATE_FAILED
-
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-
-        return cls.create_notification(OP_CREATE, OPT_FAIL, OBJ_COLLECTION, 
-                                       path, payload)
-
-
-    @classmethod
-    def create_fail_group(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        if not payload_check(P_META_MSG, payload):
-            payload['meta']['msg'] = MSG_CREATE_FAILED
-        
-        name = payload_check(P_OBJ_NAME, payload, "Undefined")
-
-        return cls.create_notification(OP_CREATE, OPT_FAIL, OBJ_GROUP, name,
-                                       payload)
-
-
-    @classmethod
-    def create_fail_resource(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        if not payload_check(P_META_MSG, payload):
-            payload['meta']['msg'] = MSG_CREATE_FAILED
-        
-        payload['meta']['sender'] = payload_check(P_META_SENDER, 
-                                                  payload, 
-                                                  radon.cfg.sys_lib_user)
-
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-
-        return cls.create_notification(OP_CREATE, OPT_FAIL, OBJ_RESOURCE, path,
-                                       payload)
-
-
-    @classmethod
-    def create_fail_user(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        if not payload_check(P_META_MSG, payload):
-            payload['meta']['msg'] = MSG_CREATE_FAILED
-
-        payload['meta']['sender'] = payload_check(P_META_SENDER, 
-                                                  payload, 
-                                                  radon.cfg.sys_lib_user)
-        
-        login = payload_check(P_OBJ_LOGIN, payload, "Undefined")
-
-        return cls.create_notification(OP_CREATE, OPT_FAIL, OBJ_USER, login,
-                                       payload)
-
-
-    @classmethod
-    def create_notification(cls, op_name, op_type, obj_type, obj_key,
-                            payload):
-        sender = payload_check(P_META_SENDER, payload, radon.cfg.sys_lib_user)
-        new = cls.new(
-            op_name=op_name,
-            op_type=op_type,
-            obj_type=obj_type,
-            obj_key=obj_key,
-            sender=sender,
+    def create_notification(cls, payload):
+        new = Notification.new(
+            op_name=payload.get_operation_name(),
+            op_type=payload.get_operation_type(),
+            obj_type=payload.get_object_type(),
+            obj_key=payload.get_object_key(),
+            sender=payload.get_sender(),
             processed=True,
-            payload=json.dumps(payload, default=datetime_serializer),
+            payload=json.dumps(payload.get_json(), default=datetime_serializer),
         )
         new.mqtt_publish()
         return new
-
-
-    @classmethod
-    def create_request_collection(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            if 'meta' not in payload:
-                payload['meta'] = {}
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_OBJ_NAME, payload):
-             missing.append("name")
-        if not payload_check(P_OBJ_CONTAINER, payload):
-             missing.append("container")
-        if missing:
-            msg = MSG_INFO_MISSING.format("collection", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.create_fail_collection(payload)
-
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-        return cls.create_notification(OP_CREATE, OPT_REQUEST, OBJ_COLLECTION, 
-                                       path, payload)
-
-
-    @classmethod
-    def create_request_group(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            if 'meta' not in payload:
-                payload['meta'] = {}
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_OBJ_NAME, payload):
-             missing.append("name")
-        if missing:
-            msg = MSG_INFO_MISSING.format("group", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.create_fail_group(payload)
-
-        name = payload_check(P_OBJ_NAME, payload, "Unknown")
-        return cls.create_notification(OP_CREATE, OPT_REQUEST, OBJ_GROUP, name,
-                                       payload)
-
-
-    @classmethod
-    def create_request_resource(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            if 'meta' not in payload:
-                payload['meta'] = {}
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_OBJ_NAME, payload):
-             missing.append("name")
-        if not payload_check(P_OBJ_CONTAINER, payload):
-             missing.append("container")
-        if missing:
-            msg = MSG_INFO_MISSING.format("resource", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.create_fail_resource(payload)
-
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-        return cls.create_notification(OP_CREATE, OPT_REQUEST, OBJ_RESOURCE, 
-                                       path, payload)
-    
-
-    @classmethod
-    def create_request_user(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            if 'meta' not in payload:
-                payload['meta'] = {}
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_OBJ_LOGIN, payload):
-             missing.append("login")
-        if not payload_check("/obj/password", payload):
-             missing.append("password")
-        if missing:
-            msg = MSG_INFO_MISSING.format("user", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.create_fail_user(payload)
-
-        login = payload_check(P_OBJ_LOGIN, payload, "Unknown")
-        return cls.create_notification(OP_CREATE, OPT_REQUEST, OBJ_USER, login,
-                                       payload)
-
-
-    @classmethod
-    def create_success_collection(cls, payload):
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-        return cls.create_notification(OP_CREATE, OPT_SUCCESS, OBJ_COLLECTION, 
-                                       path, payload)
-
-
-    @classmethod
-    def create_success_group(cls, payload):
-        name = payload_check(P_OBJ_NAME, payload, "Unknown")
-        return cls.create_notification(OP_CREATE, OPT_SUCCESS, OBJ_GROUP, name,
-                                       payload)
-
-
-    @classmethod
-    def create_success_resource(cls, payload):
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-        return cls.create_notification(OP_CREATE, OPT_SUCCESS, OBJ_RESOURCE, 
-                                       path, payload)
-
-
-    @classmethod
-    def create_success_user(cls, payload):
-        login = payload_check(P_OBJ_LOGIN, payload, "Unknown")
-        return cls.create_notification(OP_CREATE, OPT_SUCCESS, OBJ_USER, login,
-                                       payload)
-
-
-    @classmethod
-    def delete_fail_collection(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        if not payload_check(P_META_MSG, payload):
-            payload['meta']['msg'] = MSG_DELETE_FAILED
-        payload['meta']['sender'] = payload_check(P_META_SENDER, 
-                                                  payload, 
-                                                  radon.cfg.sys_lib_user)
-
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-        return cls.create_notification(OP_DELETE, OPT_FAIL, OBJ_COLLECTION, 
-                                       path, payload)
-
-
-    @classmethod
-    def delete_fail_group(cls, payload):
-        """
-        The deletion of a group failed, publish the message on MQTT
-        
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        if not payload_check(P_META_MSG, payload):
-            payload['meta']['msg'] = MSG_DELETE_FAILED
-
-        payload['meta']['sender'] = payload_check(P_META_SENDER, 
-                                                  payload, 
-                                                  radon.cfg.sys_lib_user)
-
-        name = payload_check(P_OBJ_NAME, payload, "Unknown")
-        return cls.create_notification(OP_DELETE, OPT_FAIL, OBJ_GROUP, name,
-                                       payload)
-
-
-    @classmethod
-    def delete_fail_resource(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        if not payload_check(P_META_MSG, payload):
-            payload['meta']['msg'] = MSG_DELETE_FAILED
-        payload['meta']['sender'] = payload_check(P_META_SENDER, 
-                                                  payload, 
-                                                  radon.cfg.sys_lib_user)
-
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-        return cls.create_notification(OP_DELETE, OPT_FAIL, OBJ_RESOURCE, path,
-                                       payload)
-
-
-    @classmethod
-    def delete_fail_user(cls, payload):
-        """
-        The deletion of a user failed, publish the message on MQTT
-        
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        if not payload_check(P_META_MSG, payload):
-            payload['meta']['msg'] = MSG_DELETE_FAILED
-
-        payload['meta']['sender'] = payload_check(P_META_SENDER, 
-                                                  payload, 
-                                                  radon.cfg.sys_lib_user)
-
-        login = payload_check(P_OBJ_LOGIN, payload, "Unknown")
-        return cls.create_notification(OP_DELETE, OPT_FAIL, OBJ_USER, login,
-                                       payload)
-
-
-    @classmethod
-    def delete_request_collection(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            if 'meta' not in payload:
-                payload['meta'] = {}
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_OBJ_NAME, payload):
-             missing.append("name")
-        if not payload_check(P_OBJ_CONTAINER, payload):
-             missing.append("container")
-        if missing:
-            msg = MSG_INFO_MISSING.format("collection", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.delete_fail_collection(payload)
-
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-        return cls.create_notification(OP_DELETE, OPT_REQUEST, OBJ_COLLECTION, 
-                                       path, payload)
-
-
-    @classmethod
-    def delete_request_group(cls, payload):
-        """
-        Ask for the deletion of a group and publish the message on MQTT
-        
-        :param payload: The dictionary that contains message information
-        :type obj: dict
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_OBJ_NAME, payload):
-             missing.append("name")
-        if missing:
-            msg = MSG_INFO_MISSING.format("group", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.delete_fail_group(payload)
-
-        name = payload_check(P_OBJ_NAME, payload, "Unknown")
-        return cls.create_notification(OP_DELETE, OPT_REQUEST, OBJ_GROUP, name,
-                                       payload)
-
-
-    @classmethod
-    def delete_request_resource(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            if 'meta' not in payload:
-                payload['meta'] = {}
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_OBJ_NAME, payload):
-             missing.append("name")
-        if not payload_check(P_OBJ_CONTAINER, payload):
-             missing.append("container")
-        if missing:
-            msg = MSG_INFO_MISSING.format("resource", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.delete_fail_resource(payload)
-
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-        return cls.create_notification(OP_DELETE, OPT_REQUEST, OBJ_RESOURCE, 
-                                       path, payload)
-
-
-    @classmethod
-    def delete_request_user(cls, payload):
-        """
-        Ask for the deletion of a user and publish the message on MQTT
-        
-        :param payload: The dictionary that contains message information
-        :type obj: dict
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_OBJ_LOGIN, payload):
-             missing.append("login")
-        if missing:
-            msg = MSG_INFO_MISSING.format("user", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.delete_fail_user(payload)
-
-        login = payload_check(P_OBJ_LOGIN, payload, "Unknown")
-        return cls.create_notification(OP_DELETE, OPT_REQUEST, OBJ_USER, login,
-                                       payload)
-
-
-    @classmethod
-    def delete_success_collection(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        if not payload_check(P_META_MSG, payload):
-            payload['meta']['msg'] = MSG_CREATE_FAILED
-        payload['meta']['sender'] = payload_check(P_META_SENDER, 
-                                                  payload, 
-                                                  radon.cfg.sys_lib_user)
-
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-        return cls.create_notification(OP_DELETE, OPT_SUCCESS, OBJ_COLLECTION, 
-                                       path, payload)
-
-
-    @classmethod
-    def delete_success_group(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            if 'meta' not in payload:
-                payload['meta'] = {}
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_OBJ_NAME, payload):
-             missing.append("name")
-        if missing:
-            msg = MSG_INFO_MISSING.format("group", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.delete_fail_user(payload)
-
-        name = payload_check(P_OBJ_NAME, payload, "Unknown")
-        return cls.create_notification(OP_DELETE, OPT_SUCCESS, OBJ_GROUP, name,
-                                       payload)
-
-
-    @classmethod
-    def delete_success_resource(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        if not payload_check(P_META_MSG, payload):
-            payload['meta']['msg'] = MSG_CREATE_FAILED
-        payload['meta']['sender'] = payload_check(P_META_SENDER, 
-                                                  payload, 
-                                                  radon.cfg.sys_lib_user)
-
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-        return cls.create_notification(OP_DELETE, OPT_SUCCESS, OBJ_RESOURCE, 
-                                           path, payload)
-
-
-    @classmethod
-    def delete_success_user(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            if 'meta' not in payload:
-                payload['meta'] = {}
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_OBJ_LOGIN, payload):
-             missing.append("login")
-        if missing:
-            msg = MSG_INFO_MISSING.format("user", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.delete_fail_user(payload)
-
-        login = payload_check(P_OBJ_LOGIN, payload, "Unknown")
-        return cls.create_notification(OP_DELETE, OPT_SUCCESS, OBJ_USER, login,
-                                       payload)
 
 
     @classmethod
@@ -656,7 +207,7 @@ class Notification(Model):
         #         return Notification.objects.filter(date__in=last_x_days())\
         #             .order_by("-when").all().limit(count)
         session = connection.get_session()
-        keyspace = radon.cfg.dse_keyspace
+        keyspace = cfg.dse_keyspace
         session.set_keyspace(keyspace)
         # I couldn't find how to disable paging in cqlengine in the "model" view
         # so I create the cal query directly
@@ -677,312 +228,364 @@ class Notification(Model):
         return res
 
 
-    @classmethod
-    def update_fail_collection(cls, payload):
-        """
-        The modification of a collection failed, publish the message on MQTT
-        
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        if not payload_check(P_META_MSG, payload):
-            payload['meta']['msg'] = MSG_UPDATE_FAILED
-        payload['meta']['sender'] = payload_check(P_META_SENDER, 
-                                                  payload, 
-                                                  radon.cfg.sys_lib_user)
-
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-        return cls.create_notification(OP_UPDATE, OPT_FAIL, OBJ_COLLECTION, 
-                                       path, payload)
+def create_fail_collection(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadCreateFailCollection.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
 
 
-    @classmethod
-    def update_fail_group(cls, payload):
-        """
-        The upate of a group failed, publish the message on MQTT
-        
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        if not payload_check(P_META_MSG, payload):
-            payload['meta']['msg'] = MSG_UPDATE_FAILED
-
-        payload['meta']['sender'] = payload_check(P_META_SENDER, 
-                                                  payload, 
-                                                  radon.cfg.sys_lib_user)
-
-        name = payload_check(P_OBJ_NAME, payload, "Unknown")
-        return cls.create_notification(OP_UPDATE, OPT_FAIL, OBJ_GROUP, name,
-                                       payload)
+def create_fail_group(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid:# Create valid payload
+        payload = PayloadCreateFailGroup.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
 
 
-    @classmethod
-    def update_fail_resource(cls, payload):
-        """
-        The modification of a resource failed, publish the message on MQTT
-        
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        if not payload_check(P_META_MSG, payload):
-            payload['meta']['msg'] = MSG_UPDATE_FAILED
-        payload['meta']['sender'] = payload_check(P_META_SENDER, 
-                                                  payload, 
-                                                  radon.cfg.sys_lib_user)
-
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-        return cls.create_notification(OP_UPDATE, OPT_FAIL, OBJ_RESOURCE, path,
-                                       payload)
+def create_fail_resource(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid:# Create valid payload
+        payload = PayloadCreateFailResource.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
 
 
-    @classmethod
-    def update_fail_user(cls, payload):
-        """
-        The upate of a user failed, publish the message on MQTT
-        
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        if not payload_check(P_META_MSG, payload):
-            payload['meta']['msg'] = MSG_UPDATE_FAILED
 
-        payload['meta']['sender'] = payload_check(P_META_SENDER, 
-                                                  payload, 
-                                                  radon.cfg.sys_lib_user)
-
-        login = payload_check(P_OBJ_LOGIN, payload, "Unknown")
-        return cls.create_notification(OP_UPDATE, OPT_FAIL, OBJ_USER, login,
-                                       payload)
+def create_fail_user(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid:# Create valid payload
+        payload = PayloadCreateFailUser.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
 
 
-    @classmethod
-    def update_request_collection(cls, payload):
-        """
-        Ask for the modification of a collection and publish the message on MQTT
-        
-        
-        :param payload: The dictionary that contains message information
-        :type obj: dict
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            if 'meta' not in payload:
-                payload['meta'] = {}
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_OBJ_NAME, payload):
-             missing.append("name")
-        if not payload_check(P_OBJ_CONTAINER, payload):
-             missing.append("container")
-        if missing:
-            msg = MSG_INFO_MISSING.format("collection", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.update_fail_collection(payload)
-
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-        return cls.create_notification(OP_UPDATE, OPT_REQUEST, OBJ_COLLECTION, 
-                                       path, payload)
+def create_request_collection(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadCreateFailCollection.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
 
 
-    @classmethod
-    def update_request_group(cls, payload):
-        """
-        Ask for the modification of a group and publish the message on MQTT
-        
-        :param payload: The dictionary that contains message information
-        :type obj: dict
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_OBJ_NAME, payload):
-             missing.append("name")
-        if missing:
-            msg = MSG_INFO_MISSING.format("group", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.update_fail_group(payload)
-
-        name = payload_check(P_OBJ_NAME, payload, "Unknown")
-        return cls.create_notification(OP_UPDATE, OPT_REQUEST, OBJ_GROUP, name,
-                                       payload)
+def create_request_group(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadCreateFailGroup.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
 
 
-    @classmethod
-    def update_request_resource(cls, payload):
-        """
-        Ask for the modification of a resource and publish the message on MQTT
-        
-        
-        :param payload: The dictionary that contains message information
-        :type obj: dict
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            if 'meta' not in payload:
-                payload['meta'] = {}
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_OBJ_NAME, payload):
-             missing.append("name")
-        if not payload_check(P_OBJ_CONTAINER, payload):
-             missing.append("container")
-        if missing:
-            msg = MSG_INFO_MISSING.format("resource", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.update_fail_resource(payload)
-
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-        return cls.create_notification(OP_UPDATE, OPT_REQUEST, OBJ_RESOURCE, 
-                                       path, payload)
+def create_request_resource(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadCreateFailResource.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
 
 
-    @classmethod
-    def update_request_user(cls, payload):
-        """
-        Ask for the modification of a user and publish the message on MQTT
-        
-        :param payload: The dictionary that contains message information
-        :type obj: dict
-        
-        :return: The notification
-        :rtype: :class:`columns.model.Notification`
-        """
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_OBJ_LOGIN, payload):
-             missing.append("login")
-        if missing:
-            msg = MSG_INFO_MISSING.format("user", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.update_fail_user(payload)
-
-        login = payload_check(P_OBJ_LOGIN, payload, "Unknown")
-        return cls.create_notification(OP_UPDATE, OPT_REQUEST, OBJ_USER, login,
-                                       payload)
+def create_request_user(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadCreateFailUser.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
 
 
-    @classmethod
-    def update_success_collection(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            if 'meta' not in payload:
-                payload['meta'] = {}
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_PRE_NAME, payload):
-             missing.append("name")
-        if not payload_check(P_PRE_CONTAINER, payload):
-             missing.append("container")
-        if missing:
-            msg = MSG_INFO_MISSING.format("collection", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.update_fail_collection(payload)
-
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-        return cls.create_notification(OP_UPDATE, OPT_SUCCESS, OBJ_COLLECTION, 
-                                       path, payload)
+def create_success_collection(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadCreateFailCollection.default(
+            payload.get_object_key(),
+            MSG_SUCCESS_PAYLOAD_PROBLEM_CREATE,
+            payload.get_sender())
+    return Notification.create_notification(payload)
 
 
-    @classmethod
-    def update_success_group(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            if 'meta' not in payload:
-                payload['meta'] = {}
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_PRE_NAME, payload):
-             missing.append("name")
-        if missing:
-            msg = "Information is missing for the name: {}".format(
-                ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.update_fail_group(payload)
-
-        name = payload_check(P_OBJ_NAME, payload, "Unknown")
-        return cls.create_notification(OP_UPDATE, OPT_SUCCESS, OBJ_GROUP, name,
-                                       payload)
+def create_success_group(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadCreateFailGroup.default(
+            payload.get_object_key(),
+            MSG_SUCCESS_PAYLOAD_PROBLEM_CREATE,
+            payload.get_sender())
+    return Notification.create_notification(payload)
 
 
-    @classmethod
-    def update_success_resource(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            if 'meta' not in payload:
-                payload['meta'] = {}
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check(P_PRE_NAME, payload):
-             missing.append("name")
-        if not payload_check(P_PRE_CONTAINER, payload):
-             missing.append("container")
-        if missing:
-            msg = MSG_INFO_MISSING.format("resource", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.update_fail_resource(payload)
-
-        path = payload_check(P_OBJ_PATH, payload, "Unknown")
-        return cls.create_notification(OP_UPDATE, OPT_SUCCESS, OBJ_RESOURCE, 
-                                       path, payload)
+def create_success_resource(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadCreateFailResource.default(
+            payload.get_object_key(),
+            MSG_SUCCESS_PAYLOAD_PROBLEM_CREATE,
+            payload.get_sender())
+    return Notification.create_notification(payload)
 
 
-    @classmethod
-    def update_success_user(cls, payload):
-        if 'meta' not in payload:
-            payload['meta'] = {}
-        sender = payload_check(P_META_SENDER, payload)
-        if not sender:
-            if 'meta' not in payload:
-                payload['meta'] = {}
-            payload['meta']['sender'] = radon.cfg.sys_lib_user
-        missing = []
-        if not payload_check("/pre/login", payload):
-             missing.append("login")
-        if missing:
-            msg = MSG_INFO_MISSING.format("user", ", ".join(missing))
-            payload['meta']['msg'] = msg
-            return cls.update_fail_user(payload)
+def create_success_user(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadCreateFailUser.default(
+            payload.get_object_key(),
+            MSG_SUCCESS_PAYLOAD_PROBLEM_CREATE,
+            payload.get_sender())
+    return Notification.create_notification(payload)
 
-        login = payload_check(P_OBJ_LOGIN, payload, "Unknown")
-        return cls.create_notification(OP_UPDATE, OPT_SUCCESS, OBJ_USER, login,
-                                       payload)
+
+def delete_fail_collection(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadDeleteFailCollection.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def delete_fail_group(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid:# Create valid payload
+        payload = PayloadDeleteFailGroup.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def delete_fail_resource(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid:# Create valid payload
+        payload = PayloadDeleteFailResource.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def delete_fail_user(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid:# Create valid payload
+        payload = PayloadDeleteFailUser.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def delete_request_collection(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadDeleteFailCollection.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def delete_request_group(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadDeleteFailGroup.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def delete_request_resource(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadDeleteFailResource.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def delete_request_user(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadDeleteFailUser.default(
+            payload.get_object_key(),
+            payload.get_sender(),
+            msg)
+    return Notification.create_notification(payload)
+
+
+def delete_success_collection(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadDeleteFailCollection.default(
+            payload.get_object_key(),
+            MSG_SUCCESS_PAYLOAD_PROBLEM_DELETE,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def delete_success_group(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadDeleteFailGroup.default(
+            payload.get_object_key(),
+            MSG_SUCCESS_PAYLOAD_PROBLEM_DELETE,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def delete_success_resource(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadDeleteFailResource.default(
+            payload.get_object_key(),
+            MSG_SUCCESS_PAYLOAD_PROBLEM_DELETE,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def delete_success_user(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadDeleteFailUser.default(
+            payload.get_object_key(),
+            MSG_SUCCESS_PAYLOAD_PROBLEM_DELETE,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def update_fail_collection(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadUpdateFailCollection.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def update_fail_group(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadUpdateFailGroup.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def update_fail_resource(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadUpdateFailResource.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def update_fail_user(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payloadx
+        payload = PayloadUpdateFailUser.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def update_request_collection(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadUpdateFailCollection.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def update_request_group(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadUpdateFailGroup.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def update_request_resource(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadUpdateFailResource.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def update_request_user(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadUpdateFailUser.default(
+            payload.get_object_key(),
+            msg,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def update_success_collection(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadUpdateFailCollection.default(
+            payload.get_object_key(),
+            payload.get_sender(),
+            MSG_SUCCESS_PAYLOAD_PROBLEM_DELETE)
+    return Notification.create_notification(payload)
+
+
+def update_success_group(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadUpdateFailGroup.default(
+            payload.get_object_key(),
+            MSG_SUCCESS_PAYLOAD_PROBLEM_DELETE,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def update_success_resource(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadUpdateFailResource.default(
+            payload.get_object_key(),
+            MSG_SUCCESS_PAYLOAD_PROBLEM_DELETE,
+            payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def update_success_user(payload):
+    (is_valid, msg) = payload.validate()
+    if not is_valid: # Create valid payload
+        payload = PayloadUpdateFailUser.default(
+            payload.get_object_key(),
+            MSG_SUCCESS_PAYLOAD_PROBLEM_DELETE,
+            payload.get_sender())
+    return Notification.create_notification(payload)
 
 

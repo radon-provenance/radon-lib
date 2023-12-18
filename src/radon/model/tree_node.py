@@ -10,6 +10,7 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
+# limitations under the License.
 
 
 from dse.cqlengine.models import Model
@@ -17,14 +18,13 @@ from dse.query import SimpleStatement
 from dse.cqlengine import columns
 from dse.cqlengine import connection
 
-import radon
+from radon.model.config import cfg
 from radon.util import (
     default_cdmi_id,
     merge
 )
-from radon.model import Ace
-# 
 from radon.model.acl import (
+    Ace,
     acl_list_to_cql
 )
 
@@ -100,7 +100,7 @@ class TreeNode(Model):
         :type acl_cql: str
         """
         session = connection.get_session()
-        keyspace = radon.cfg.dse_keyspace
+        keyspace = cfg.dse_keyspace
         session.set_keyspace(keyspace)
         query = SimpleStatement(
             u"""UPDATE tree_node SET acl={} 
@@ -143,7 +143,7 @@ class TreeNode(Model):
         :type acl_cql: str
         """
         session = connection.get_session()
-        keyspace = radon.cfg.dse_keyspace
+        keyspace = cfg.dse_keyspace
         session.set_keyspace(keyspace)
         query = SimpleStatement(
             u"""UPDATE tree_node SET acl=acl+{} 

@@ -17,7 +17,7 @@ limitations under the License.
 import pytest
 import uuid
 
-from radon import cfg
+from radon.model.config import cfg
 from radon.database import (
     connect,
     create_default_users,
@@ -26,11 +26,9 @@ from radon.database import (
     destroy,
     initialise,
 )
-from radon.model import (
-    Group,
-    User
-)
-from radon.model.errors import(
+from radon.model.group import Group
+from radon.model.user import User
+from radon.model.errors import (
     UserConflictError
 )
 

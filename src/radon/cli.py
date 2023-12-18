@@ -62,15 +62,11 @@ from radon.database import (
     destroy,
     initialise
 )
-from radon.model import (
-    Collection,
-    Group,
-    Resource,
-    User
-)
-from radon.model.errors import (
-    NoSuchCollectionError
-)
+from radon.model.collection import Collection
+from radon.model.group import Group
+from radon.model.resource import Resource
+from radon.model.user import User
+from radon.model.errors import NoSuchCollectionError
 from radon.util import (
     guess_mimetype,
     random_password,
@@ -673,7 +669,6 @@ def main():
     logging.getLogger("dse.policies").setLevel(logging.WARNING)
     logging.getLogger("dse.cluster").setLevel(logging.WARNING)
     logging.getLogger("dse.cqlengine.management").setLevel(logging.WARNING)
-    import sys
     arguments = docopt.docopt(
         __doc_opt__, version="Radon Admin CLI {}".format(radon.__version__)
     )

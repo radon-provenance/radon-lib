@@ -17,11 +17,8 @@ from dse.cqlengine import connection
 from dse.query import SimpleStatement
 import json
 
-import radon
-from radon.model import (
-    Notification,
-    TreeNode,
-)
+from radon.model.config import cfg
+from radon.model.tree_node import TreeNode
 from radon.model.acl import (
     acemask_to_str,
     acl_cdmi_to_cql,
@@ -41,6 +38,18 @@ from radon.model.errors import (
     CollectionConflictError,
     ResourceConflictError,
     NoSuchCollectionError
+)
+from radon.model.notification import (
+    create_fail_collection,
+    create_success_collection,
+    delete_success_collection,
+    update_success_collection,
+)
+from radon.model.payload import (
+    PayloadCreateFailCollection,
+    PayloadCreateSuccessCollection,
+    PayloadDeleteSuccessCollection,
+    PayloadUpdateSuccessCollection
 )
 
 
@@ -107,8 +116,7 @@ class Collection(object):
         :return: The new Collection object
         :rtype: :class:`radon.model.Collection`
         """
-        from radon.model import Notification
-        from radon.model import Resource
+        from radon.model.resource import Resource
                 
         if not name.endswith("/"):
             name = name + '/'
@@ -118,28 +126,26 @@ class Collection(object):
         path = merge(container, name)
 
         if not sender:
-            sender = radon.cfg.sys_lib_user
+            sender = cfg.sys_lib_user
 
-        payload = {'meta' : {'sender': sender}}
- 
         # Check if parent collection exists
         parent = Collection.find(container)
         if parent is None:
-            payload['obj'] = {'path' : path}
-            payload['meta']['msg'] = "Parent container doesn't exist"
-            Notification.create_fail_collection(payload)
+            create_fail_collection(
+                PayloadCreateFailCollection.default(
+                    path, "Parent container doesn't exist", sender))
             return None
         resource = Resource.find(merge(container, name))
         if resource is not None:
-            payload['obj'] = {'path' : path}
-            payload['meta']['msg'] = "Conflict with a resource"
-            Notification.create_fail_collection(payload)
+            create_fail_collection(
+                PayloadCreateFailCollection.default(
+                    path, "Conflict with a resource", sender))
             return None
         collection = Collection.find(path)
         if collection is not None:
-            payload['obj'] = {'path' : path}
-            payload['meta']['msg'] = "Conflict with a collection"
-            Notification.create_fail_collection(payload)
+            create_fail_collection(
+                PayloadCreateFailCollection.default(
+                    path, "Conflict with a collection", sender))
             return None
 
         now_date = now()
@@ -148,8 +154,8 @@ class Collection(object):
         else:
             user_meta = metadata
         sys_meta = {
-            radon.cfg.meta_create_ts: encode_meta(now_date),
-            radon.cfg.meta_modify_ts: encode_meta(now_date)
+            cfg.meta_create_ts: encode_meta(now_date),
+            cfg.meta_modify_ts: encode_meta(now_date)
         }
 
         coll_node = TreeNode.create(
@@ -164,8 +170,12 @@ class Collection(object):
         if read_access or write_access:
             new.create_acl_list(read_access, write_access)
         
-        payload['obj'] = new.mqtt_get_state()
-        Notification.create_success_collection(payload)
+        payload_json = {
+            "obj": new.mqtt_get_state(),
+            "meta": {"sender": sender}
+        }
+        create_success_collection(PayloadCreateSuccessCollection(payload_json))
+
         return new
 
 
@@ -177,11 +187,10 @@ class Collection(object):
         :return: The Collection object for the root
         :rtype: :class:`radon.model.Collection`
         """
-        from radon.model import Notification
         now_date = now()
         sys_meta = {
-            radon.cfg.meta_create_ts: encode_meta(now_date),
-            radon.cfg.meta_modify_ts: encode_meta(now_date)
+            cfg.meta_create_ts: encode_meta(now_date),
+            cfg.meta_modify_ts: encode_meta(now_date)
         }
         # If the root already exist it won't be replaced as PK will be the same
         root_node = TreeNode.create(
@@ -289,7 +298,7 @@ class Collection(object):
         :return: The timestamp stored in the system metadata
         :rtype: datetime
         """
-        return self.node.sys_meta.get(radon.cfg.meta_create_ts)
+        return self.node.sys_meta.get(cfg.meta_create_ts)
 
 
     def get_modify_ts(self):
@@ -299,7 +308,7 @@ class Collection(object):
         :return: The timestamp stored in the system metadata
         :rtype: datetime
         """
-        return self.node.sys_meta.get(radon.cfg.meta_modify_ts)
+        return self.node.sys_meta.get(cfg.meta_modify_ts)
 
 
     def delete(self, **kwargs):
@@ -309,22 +318,15 @@ class Collection(object):
         :param sender: The name of the user who deleted the collection
         :type sender: str, optional
         """
-        from radon.model import Resource
+        from radon.model.resource import Resource
         if "sender" in kwargs:
             sender = kwargs['sender']
             del kwargs['sender']
         else:
-            sender = radon.cfg.sys_lib_user
+            sender = cfg.sys_lib_user
  
         if self.is_root:
             return
-            
-        payload = {
-            "obj": self.mqtt_get_state(),
-            'meta' : {
-                "sender": sender
-            }
-        }
 
         # We don't need the suffixes for the resources, otherwise we won't 
         # find them
@@ -338,13 +340,18 @@ class Collection(object):
             if child:
                 child.delete()
 
+        payload_json = {
+            "obj": {"path": self.path},
+            "meta": {"sender": sender}
+        }
+
         session = connection.get_session()
-        keyspace = radon.cfg.dse_keyspace
+        keyspace = cfg.dse_keyspace
         session.set_keyspace(keyspace)
         query = SimpleStatement("""DELETE FROM tree_node WHERE container=%s and name=%s""")
         session.execute(query, (self.container, self.name, ))
-        
-        Notification.delete_success_collection(payload)
+
+        delete_success_collection(PayloadDeleteSuccessCollection(payload_json))
 
 
     def get_acl_dict(self):
@@ -377,7 +384,7 @@ class Collection(object):
                 write_access.append(gid)
             else:
                 # Unknown combination
-                radon.cfg.logger.warning(
+                cfg.logger.warning(
                     "The acemask for group {0} on collection {1} is invalid".format(
                         gid,
                         self.path
@@ -460,7 +467,7 @@ class Collection(object):
                 do_name = node.name
                 if add_ref_suffix:
                     if node.object_url:
-                        if not node.object_url.startswith(radon.cfg.protocol_cassandra):
+                        if not node.object_url.startswith(cfg.protocol_cassandra):
                             do_name = "{}?".format(do_name)
                     else:
                         do_name = "{}#".format(do_name)
@@ -510,7 +517,7 @@ class Collection(object):
         :return: a list of pairs (name, value)
         :rtype: list
         """
-        return metadata_to_list(self.node.sys_meta, radon.cfg.vocab_dict)
+        return metadata_to_list(self.node.sys_meta, cfg.vocab_dict)
 
 
     def get_list_user_meta(self):
@@ -598,7 +605,7 @@ class Collection(object):
         :rtype: dict
         """
         data = {
-            "id": self.uuid,
+            "uuid": self.uuid,
             "container": self.path,
             "name": self.name,
             "path": self.path,
@@ -624,8 +631,6 @@ class Collection(object):
         :param metadata: The plain password to encrypt
         :type metadata: dict
         """
-        from radon.model import Notification
- 
         pre_state = self.mqtt_get_state()
         now_date = now()
         if "metadata" in kwargs:
@@ -635,7 +640,7 @@ class Collection(object):
             del kwargs["metadata"]
         
         sys_meta = self.node.sys_meta
-        sys_meta[radon.cfg.meta_modify_ts] = encode_meta(now_date)
+        sys_meta[cfg.meta_modify_ts] = encode_meta(now_date)
         kwargs["sys_meta"] = sys_meta
         if "sender" in kwargs:
             sender = kwargs["sender"]
@@ -663,14 +668,12 @@ class Collection(object):
         post_state = coll.mqtt_get_state()
         
         if (pre_state != post_state):
-            payload = {
-                "pre" : pre_state,
-                "post": post_state,
-                "meta": {
-                    "sender": sender
-                    }
+            payload_json = {
+                "obj" : pre_state,
+                "new": post_state,
+                "meta": {"sender": sender}
             }
-            Notification.update_success_collection(payload)
+            update_success_collection(PayloadUpdateSuccessCollection(payload_json))
         return self
 
 

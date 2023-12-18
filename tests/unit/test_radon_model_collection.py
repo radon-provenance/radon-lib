@@ -16,13 +16,11 @@ limitations under the License.
 import pytest
 import uuid
 
-from radon.model import (
-    Collection,
-    Group,
-    Resource,
-    User
-)
-from radon import cfg
+from radon.model.config import cfg
+from radon.model.collection import Collection
+from radon.model.group import Group
+from radon.model.resource import Resource
+from radon.model.user import User
 from radon.database import (
     connect,
     create_default_users,
@@ -53,8 +51,8 @@ def setup_module():
     pwd = uuid.uuid4().hex
     email = uuid.uuid4().hex
     grp1 = Group.create(name="grp1")
-    u1 = User.create(name="user1", password=pwd, email=email, administrator=True)
-    u2 = User.create(name="user2", password=pwd, email=email, administrator=False)
+    u1 = User.create(login="user1", password=pwd, email=email, administrator=True)
+    u2 = User.create(login="user2", password=pwd, email=email, administrator=False)
     
     grp1.add_users(["user2"])
     

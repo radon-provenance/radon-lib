@@ -16,7 +16,7 @@ limitations under the License.
 import pytest
 import logging
 
-from radon import cfg
+from radon.model.config import cfg
 from radon.log import init_logger
 
 

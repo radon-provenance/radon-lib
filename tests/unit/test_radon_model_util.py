@@ -21,7 +21,7 @@ from datetime import (
 import uuid
 import ldap
 
-from radon import cfg
+from radon.model.config import cfg
 from radon.util import(
     datetime_serializer,
     datetime_unserializer,
@@ -49,10 +49,8 @@ from radon.util import(
     verify_ldap_password,
     verify_password
 )
-from radon.model import (
-    Collection,
-    Resource
-)
+from radon.model.collection import Collection
+from radon.model.resource import Resource
 from radon.database import (
     connect,
     create_root,

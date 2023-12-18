@@ -20,7 +20,7 @@ import hashlib
 import json
 import io
 
-from radon import cfg
+from radon.model.config import cfg
 from radon.database import (
     connect,
     create_default_users,
@@ -29,14 +29,12 @@ from radon.database import (
     destroy,
     initialise,
 )
-from radon.model import (
-    Collection,
-    DataObject,
-    Group,
-    Resource,
-    TreeNode,
-    User
-)
+from radon.model.collection import Collection
+from radon.model.data_object import DataObject
+from radon.model.group import Group
+from radon.model.resource import Resource
+from radon.model.tree_node import TreeNode
+from radon.model.user import User
 from radon.model.resource import NoUrlResource
 from radon.model.errors import(
     CollectionConflictError,

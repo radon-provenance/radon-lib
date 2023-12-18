@@ -21,10 +21,6 @@ from io import (
 from datetime import datetime
 import json
 
-
-from radon.model import (
-    DataObject
-)
 from radon.database import (
     connect,
     create_default_users,
@@ -33,11 +29,12 @@ from radon.database import (
     destroy,
     initialise,
 )
-from radon import cfg
 from radon.model.acl import (
     Ace,
     acl_list_to_cql
 )
+from radon.model.config import cfg
+from radon.model.data_object import DataObject
 
 TEST_CONTENT = "Test Data".encode()
 TEST_CONTENT1 = "This ".encode()

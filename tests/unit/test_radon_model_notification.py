@@ -16,7 +16,7 @@ limitations under the License.
 import pytest
 
 from radon.util import default_uuid
-from radon import cfg
+from radon.model.config import cfg
 from radon.database import (
     connect,
     create_default_users,

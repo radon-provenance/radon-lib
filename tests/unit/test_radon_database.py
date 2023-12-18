@@ -22,7 +22,7 @@ from dse.cqlengine.management import (
     drop_keyspace
 )
 
-from radon import cfg
+from radon.model.config import cfg
 from radon.database import (
     connect,
     create_default_users,

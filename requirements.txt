@@ -12,3 +12,5 @@ pytest-cov==3.0.0
 pytest-mock==3.8.2
 faker==9.5.2
 cli-test-helpers==1.0.1
+
+jsonschema==4.20.0
