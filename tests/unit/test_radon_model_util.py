@@ -1,19 +1,18 @@
-"""Copyright 2021
+# Radon Copyright 2021, University of Oxford
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+# http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-"""
-
-from dse.util import uuid_from_time
+from cassandra.util import uuid_from_time
 from datetime import (
     date,
     datetime
@@ -42,8 +41,10 @@ from radon.util import(
     meta_cassandra_to_cdmi,
     meta_cdmi_to_cassandra,
     metadata_to_list,
+    mk_cassandra_url,
     now,
     path_exists,
+    payload_add,
     random_password,
     split,
     verify_ldap_password,
@@ -223,10 +224,21 @@ def test_metadata_to_list():
     assert metadata_to_list(meta, cfg.vocab_dict) == [(cfg.vocab_dict[cfg.meta_modify_ts], now_str)]
 
 
+def test_mk_cassandra_url():
+    obj_uuid = uuid.uuid4().hex
+    assert mk_cassandra_url(obj_uuid) == "cassandra://{}".format(obj_uuid)
+    
+
 def test_path_exists():
     assert path_exists("/")
     assert path_exists("/coll1/")
     assert not path_exists("/undefined_coll/")
+    
+
+def test_payload_add():
+    payload = {}
+    payload_add(payload, "/a/b", "test")
+    assert payload["a"]["b"] == "test"
 
 
 def test_random_password():
@@ -283,5 +295,6 @@ def test_verify_password():
     assert verify_password("wrong_password", pw2) == False
 
 
-
+if __name__ == "__main__":
+    test_payload_add()
 

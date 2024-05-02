@@ -1,4 +1,4 @@
-# Copyright 2021
+# Radon Copyright 2021, University of Oxford
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@ def find_version(*file_paths):
     raise RuntimeError("Unable to find version string.")
 
 setup(
-    name="radon",
+    name="radon-lib",
     version=find_version("src/radon", "__init__.py"),
     description="Radon core library",
     extras_require={},

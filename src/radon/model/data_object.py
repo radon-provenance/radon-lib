@@ -1,4 +1,4 @@
-# Copyright 2021 
+# Radon Copyright 2021, University of Oxford
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,9 +15,9 @@
 
 from io import BytesIO
 import zipfile
-from dse.cqlengine import columns, connection
-from dse.query import SimpleStatement
-from dse.cqlengine.models import Model
+from cassandra.cqlengine import columns, connection
+from cassandra.query import SimpleStatement
+from cassandra.cqlengine.models import Model
 
 from radon.model.config import cfg
 from radon.util import default_cdmi_id
@@ -81,6 +81,10 @@ class DataObject(Model):
         :type raw_data: str
         :param compressed: An option to compress the data bits
         :type compressed: bool, optional
+        
+        :return: The modified data object
+        :rtype: :class:`radon.model.data_object.DataObject`
+        
         """
         if compressed:
             f = BytesIO()
@@ -130,7 +134,7 @@ class DataObject(Model):
         :type compressed: bool, optional
         
         :return: The new Data Object
-        :rtype: :class:`radon.model.DataObject`
+        :rtype: :class:`radon.model.data_object.DataObject`
         """
         new_id = default_cdmi_id()
         if compressed:
@@ -179,7 +183,7 @@ class DataObject(Model):
         
         :return: The first DataObject of the partition corresponding to the 
           UUID
-        :rtype: :class:`radon.model.DataObject`
+        :rtype: :class:`radon.model.data_object.DataObject`
         """
         entries = cls.objects.filter(uuid=uuid)
         if not entries:

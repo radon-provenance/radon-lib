@@ -17,7 +17,7 @@ radon.cli module
 
 .. automodule:: radon.cli
    :members:
-   :undoc-members:x
+   :undoc-members:
    :show-inheritance:
 
 radon.database module

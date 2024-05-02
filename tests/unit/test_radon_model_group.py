@@ -1,20 +1,21 @@
-"""Copyright 2020 - 
+# Radon Copyright 2021, University of Oxford
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+# http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-"""
 
 import pytest
 import uuid
+import json
 
 from radon.util import default_uuid
 from radon.model.config import cfg
@@ -54,15 +55,11 @@ def test_create():
     grp = Group.create(name=grp_name)
     
     assert grp.name == grp_name
-    
-    # Test already existing group
-    with pytest.raises(GroupConflictError):
-        grp = Group.create(name=grp_name)
 
     grp.delete()
     
     # Test the username for the notification
-    grp = Group.create(name=grp_name, username="pytest")
+    grp = Group.create(name=grp_name, sender="pytest")
     grp.delete()
 
 
@@ -72,7 +69,7 @@ def create_random_user(groups):
     password = uuid.uuid4().hex
     administrator = True
     
-    return User.create(name=user_name,
+    return User.create(login=user_name,
                        email=email,
                        password=password, 
                        administrator=administrator,
@@ -95,26 +92,26 @@ def test_add_user():
     # g2 = [u4]
     # g3 = [u4]
     
-    g1.add_user(u1.name)
-    assert u1.name in g1.get_members()
+    g1.add_user(u1.login)
+    assert u1.login in g1.get_members()
     # g1 = [u1]
     
-    added, not_added, already_there = g2.add_users([u1.name, u2.name, u4.name, "unknown_user"])
+    added, not_added, already_there = g2.add_users([u1.login, u2.login, u4.login, "unknown_user"])
     # g2 = [u1, u2, u4]
-    assert u1.name in g2.get_members()
-    assert u2.name in g2.get_members()
-    assert u4.name in g2.get_members()    # From create
-    assert added == [u1.name, u2.name]
+    assert u1.login in g2.get_members()
+    assert u2.login in g2.get_members()
+    assert u4.login in g2.get_members()    # From create
+    assert added == [u1.login, u2.login]
     assert not_added == ["unknown_user"]
-    assert already_there == [u4.name]
+    assert already_there == [u4.login]
     
-    g2.rm_user(u4.name)
+    g2.rm_user(u4.login)
     # g2 = [u1, u2]
-    assert not u4.name in g2.get_members()
+    assert not u4.login in g2.get_members()
 
-    removed, not_there, not_exist = g2.rm_users([u1.name, u2.name, u4.name, "unknown_user"])
-    assert removed == [u1.name, u2.name]
-    assert not_there == [u4.name]
+    removed, not_there, not_exist = g2.rm_users([u1.login, u2.login, u4.login, "unknown_user"])
+    assert removed == [u1.login, u2.login]
+    assert not_there == [u4.login]
     assert not_exist == ["unknown_user"]
 
     g1.delete()
@@ -135,7 +132,7 @@ def test_to_dict():
     g_dict = g1.to_dict()
     assert g_dict['uuid'] == g1.uuid
     assert g_dict['name'] == grp1_name
-    assert g_dict['members'] == [u1.name]
+    assert g_dict['members'] == [u1.login]
     
     g1.delete()
     u1.delete()

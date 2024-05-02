@@ -1,4 +1,4 @@
-# Copyright 2021
+# Radon Copyright 2021, University of Oxford
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,8 +20,8 @@
 #             ("READ_ACL, READ_ATTRIBUTES", ..)
 
 
-from dse.cqlengine.usertype import UserType
-from dse.cqlengine import columns
+from cassandra.cqlengine.usertype import UserType
+from cassandra.cqlengine import columns
 from collections import OrderedDict
 
 from radon.model.config import cfg
@@ -228,7 +228,7 @@ def acemask_to_str(acemask, is_object):
     :param acemask: is in [0x0, 0x09, 0x56, 0x5F] which is translated to
                     "none, "read", "write" or "read/write"
     :type acemask: int
-    :param is_object: defined if the mask corresponds to a data object or a
+    :param is_object: defines if the mask corresponds to a data object or a
                      collection. They are similar but the CDMI standard 
                      separate them so we may need the option
     :type is_object: bool
@@ -246,7 +246,7 @@ def acl_cdmi_to_cql(cdmi_acl):
     """Convert a list of ACL for groups stored in cdmi format to the cql 
     string used to update the Cassandra model
     
-    :param cdmi_acl: a cdmi string for
+    :param cdmi_acl: a cdmi string for acl
     :type cdmi_acl: List[dict]
     
     :return: A CQL string that can be used to update values in Cassandra
@@ -266,10 +266,10 @@ def acl_cdmi_to_cql(cdmi_acl):
         group = Group.find(gid)
         if group:
             ident = group.name
-        elif gid.upper() == "AUTHENTICATED@":
-            ident = "AUTHENTICATED@"
-        elif gid.upper() == "ANONYMOUS@":
-            ident = "ANONYMOUS@"
+        elif gid.upper() == cfg.auth_group:
+            ident = cfg.auth_group
+        elif gid.upper() == cfg.anon_group:
+            ident = cfg.anon_group
         else:
             cfg.logger.warning(
                 "Wrong format for the cdmi string for ACL, {} group not found".format(
@@ -318,10 +318,10 @@ def acl_list_to_cql(read_access, write_access):
         g = Group.find(gname)
         if g:
             ident = g.name
-        elif gname.upper() == "AUTHENTICATED@":
-            ident = "AUTHENTICATED@"
-        elif gname.upper() == "ANONYMOUS@":
-            ident = "ANONYMOUS@"
+        elif gname.upper() == cfg.auth_group:
+            ident = cfg.auth_group
+        elif gname.upper() == cfg.anon_group:
+            ident = cfg.anon_group
         else: 
             cfg.logger.warning(
                 "The group {0} doesn't exist".format(
@@ -390,13 +390,16 @@ def serialize_acl_metadata(obj):
     dictionary)
     
     :param obj: A Collection or a resource
-    :type obj: :class:`radon.model.Collection` or :class:`radon.model.Resource`
+    :type obj: :class:`radon.model.collection.Collection` or :class:`radon.model.resource.Resource`
+    
+    :return: The acl stored in a dict
+    :rtype: dict
     """
     from radon.model.resource import Resource
     is_object = isinstance(obj, Resource)
     mapped_md = []
     # Create a list of ACE from the dictionary we created
-    for _, ace in obj.node.acl.items():
+    for _, ace in obj.node.get_acl().items():
         acl_md = OrderedDict()
         acl_md["acetype"] = ace.acetype
         acl_md["identifier"] = ace.identifier

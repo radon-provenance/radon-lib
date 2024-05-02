@@ -1,4 +1,4 @@
-# Copyright 2021
+# Radon Copyright 2021, University of Oxford
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,10 +13,10 @@
 # limitations under the License.
 
 
-from dse.cqlengine.models import Model
-from dse.query import SimpleStatement
-from dse.cqlengine import columns
-from dse.cqlengine import connection
+from cassandra.cqlengine.models import Model
+from cassandra.query import SimpleStatement
+from cassandra.cqlengine import columns
+from cassandra.cqlengine import connection
 
 from radon.model.config import cfg
 from radon.util import (
@@ -54,7 +54,7 @@ class TreeNode(Model):
     :type is_object: :class:`columns.Boolean`
     :param object_url: For data object the url to the content of the object. It
        can starts with 'cassandra:// if data is stored in Radon (See 
-       :class:`radon.model.DataObject`
+       :class:`radon.model.data_object.DataObject`
     :type object_url: :class:`columns.Text()`
     :param sys_meta: A Key/Value pair dictionary for system metadata
     :type sys_meta: :class:`columns.Map(columns.Text, columns.Text)`
@@ -88,7 +88,7 @@ class TreeNode(Model):
 
     def add_default_acl(self):
         """Add read access to all authenticated users"""
-        self.create_acl_list(["AUTHENTICATED@"], [])
+        self.create_acl_list([cfg.auth_group], [])
 
 
     def create_acl(self, acl_cql):
@@ -124,6 +124,31 @@ class TreeNode(Model):
         self.create_acl(cql_string)
 
 
+    def get_acl(self):
+        """
+        Get ACL from the table
+        
+        :return: The ACL stored in Cassandra
+        :rtype: dict
+        """
+        session = connection.get_session()
+        keyspace = cfg.dse_keyspace
+        session.set_keyspace(keyspace)
+        query = SimpleStatement(
+            u"""SELECT acl FROM tree_node
+            WHERE container=%s and name=%s and version=%s""")
+        rows = session.execute(query, (self.container, self.name, self.version))
+        if rows:
+            acl = rows.one().get("acl")
+            # if no acl it would return None instead of {}
+            if not acl:
+                return {}
+            else:
+                return acl
+        else:
+            return {}
+
+
     def path(self):
         """
         Get the full path of the element. See :meth:`radon.util.merge`
@@ -152,6 +177,7 @@ class TreeNode(Model):
             )
         )
         session.execute(query, (self.container, self.name, self.version))
+
 
 
     def update_acl_list(self, read_access, write_access):

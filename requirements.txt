@@ -1,16 +1,14 @@
 blessings==1.7
 crcmod==1.7
 docopt==0.6.2
-dse-driver==2.11.1
+cassandra-driver==3.29.1
 passlib==1.7.4
 paho-mqtt==1.6.1
 python-dotenv==0.19.1
 python-ldap==3.4.0
-
 pytest==6.2.5
 pytest-cov==3.0.0
 pytest-mock==3.8.2
 faker==9.5.2
 cli-test-helpers==1.0.1
-
 jsonschema==4.20.0

@@ -1,4 +1,4 @@
-# Copyright 2021
+# Radon Copyright 2021, University of Oxford
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ from datetime import (
     timedelta,
     timezone
 )
-from dse.util import uuid_from_time
+from cassandra.util import uuid_from_time
 import json
 import mimetypes
 import os
@@ -82,7 +82,7 @@ def _get_blank_id():
      :rtype: bytearray
     """
     id_length = IDENT_LEN
-    # TODO: add exceptions back
+    # If we need exceptions back:
     #     if id_length < 9 or id_length > 40:
     #         raise InvalidOptionConfigException(
     #             'identifiers',
@@ -115,6 +115,10 @@ def _insert_crc16(id_):
  
     Calculate the CRC-16 value for the given identifier, insert it
     into the given identifier and return the resulting identifier.
+ 
+    :param id_: The id being created
+    :type id_: bytearray (bytestring in Python 2)
+
     :return: the bytearray where CRC-16 has been inserted
     :rtype: bytearray
     """
@@ -127,7 +131,7 @@ def datetime_serializer(obj):
     """Convert a datetime object to its string representation for JSON serialization.
     
     :param obj: the datetime object we want to serialize
-    :type obj: datetime
+    :type obj: :class:`datetime`
     
     :return: the datetime serialized in a string
     :rtype: str
@@ -155,7 +159,7 @@ def decode_datetime(value):
     :type value: str
     
     :return: the decoded datetime
-    :rtype: datetime    
+    :rtype: datetime
     """
     str_v = decode_meta(value)
     return datetime_unserializer(str_v)
@@ -297,11 +301,11 @@ def is_reference(url):
     """Check if the url stored for a resource links to an external object or
     links to a data object stored in Radon
     
-    :param path: The path of the resource in Radon
-    :type path: str
+    :param url: The path of the resource in Radon
+    :type url: str
      
-     :return: a boolean
-     :rtype: bool
+    :return: a boolean
+    :rtype: bool
     """
     if url:
         return not url.startswith(cfg.protocol_cassandra)
@@ -315,8 +319,8 @@ def is_resource(path):
     :param path: The path of the resource in Radon
     :type path: str
      
-     :return: a boolean
-     :rtype: bool
+    :return: a boolean
+    :rtype: bool
     """
     from radon.model.resource import Resource
     return Resource.find(path) is not None
@@ -361,7 +365,6 @@ def merge(coll_name, resc_name):
     
     :param coll_name: The path of the collection
     :type coll_name: str
-    
     :param resc_name: The name of the resource/collection
     :type resc_name: str
     
@@ -423,13 +426,13 @@ def metadata_to_list(metadata, vocab_dict=None):
     """Transform a metadata dictionary retrieved from Cassandra to a list of
     tuples. If metadata items are lists they are split into multiple pairs in
     the result list
-    
+
     :param metadata: A dictionary of metadata with values encoded as JSON
     :type metadata: dict
     :param vocab_dict: a dictionary we can use to change the names of the 
-    metadata for 'prettyprinting' the output
+                       metadata for 'prettyprinting' the output
     :type vocab_dict: dict
-    
+
     :return: a list of pairs (name, value)
     :rtype: list
     """
@@ -451,11 +454,25 @@ def metadata_to_list(metadata, vocab_dict=None):
             res.append((k, decode_meta(v)))
     return res
 
+
+def new_request_id():
+    """
+    Generate a uuid that can be used to track the notification status after
+    a request, either success or failure. The id of the request and the result
+    will match
+    
+    :return: A uuid
+    :rtype: str
+    """
+    return default_uuid()
+
+
 def now():
     """Return the current UTC date/time
     
     :return: the current datetime
-    :rtype: datetime"""
+    :rtype: datetime
+    """
     return datetime.now(timezone.utc)
 
 
@@ -474,7 +491,15 @@ def path_exists(path):
 def payload_add(payload, path, value):
     """Add a value and the needed keys for a specific key, payload dict *will*
     be modified
-    If an element in the path is not a dictionary it will lost its value"""
+    If an element in the path is not a dictionary it will lost its value
+    
+    :param payload: The payload to modify
+    :type payload: dict
+    :param path: The path in the dictionary (hierarchy)
+    :type path: str
+    :param value: The new value to insert in the dict at path
+    :type value: str
+    """
     d = payload
     ls_elem = [x for x in path.split('/') if x]
     last = ls_elem[-1]
@@ -482,23 +507,22 @@ def payload_add(payload, path, value):
         if elem not in d or not isinstance(d[elem], dict):
             d[elem] = {}
         d = d[elem]
-    try:
-        d[last] = value
-    except TypeError:
-        d[last] = {last, }
+        
+    d[last] = value
+    # I don't remember why I had this exception catched, I keep it for a while
+    # just in case 
+    # try:
+    #     d[last] = value
+    # except TypeError:
+    #     d[last] = {last, }
     
 
 
 def payload_check(path, payload, default_value=None):
     """Check for a specific value in a json payload
     { 
-    "obj" : {
-        "name" : "toto",
-        "value" : 10
-    },
-    "meta" : {
-        "sender" : "toto",
-        "msg" : "error"
+    "obj" : {"name" : "toto", "value" : 10},
+    "meta" : {"sender" : "toto","msg" : "error"}
     }
     /obj/value would return 10
     /meta/sender would return "toto"
@@ -520,8 +544,7 @@ def payload_check(path, payload, default_value=None):
         for elem in ls_elem:
             obj = obj[elem]
         return obj
-             
-    except KeyError:
+    except (KeyError, AttributeError):
         return default_value
 
 
@@ -529,10 +552,10 @@ def random_password(length=10):
     """Generate a random string of fixed length
     
     :param length: The size of the password
-    :type param: int
+    :type length: int
     
     :return: A random password of size 'length'
-    :rtpe; str
+    :rtype: str
     """
     letters = string.ascii_letters + string.digits + string.punctuation
     return "".join(random.choice(letters) for _ in range(length))
@@ -574,7 +597,7 @@ def verify_ldap_password(username, password):
     :type password: str
     
     :return: a boolean which indicate if the password has been accepted by the 
-    ldap server
+             ldap server
     :rtype: bool
     """
     server_uri = cfg.auth_ldap_server_uri

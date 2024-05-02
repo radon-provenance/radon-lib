@@ -1,4 +1,4 @@
-# Copyright 2023
+# Radon Copyright 2023, University of Oxford
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,6 +21,9 @@ from radon.util import (
     datetime_serializer,
     payload_check,
 )
+from radon.util import (
+    new_request_id,
+)
 
 OP_CREATE = "create"
 OP_DELETE = "delete"
@@ -36,6 +39,7 @@ OBJ_GROUP = "group"            # name
 
 P_META_MSG = "/meta/msg"
 P_META_SENDER = "/meta/sender"
+P_META_REQ_ID = "/meta/req_id"
 
 MSG_CREATE_FAILED = "Create failed"
 MSG_UPDATE_FAILED = "update Failed"
@@ -77,6 +81,7 @@ fields_group = {
     "uuid": {"type" : "string"},
     "name": {"type" : "string"},
     "create_ts": {"type" : "string"},
+    "members": {"type" : "array"},
 }
 
 # Fields for a collection (key = path)
@@ -86,9 +91,13 @@ fields_coll = {
     "name": {"type" : "string"},
     "path": {"type" : "string"},
     "created": {"type" : "string"},
+    "create_ts": {"type" : "string"},
+    "modify_ts": {"type" : "string"},
     "user_meta": {"type" : "object"},
     "sys_meta": {"type" : "object"},
-    
+    "metadata": {"type" : "object"},
+    "read_access": {"type" : "array"},
+    "write_access": {"type" : "array"},
     "can_read": {"type" : "boolean"},
     "can_write": {"type" : "boolean"},
     "can_edit": {"type" : "boolean"},
@@ -106,8 +115,15 @@ fields_resc = {
     "type": {"type" : "string"},
     "size": {"type" : "integer"},
     "created": {"type" : "string"},
+    "create_ts": {"type" : "string"},
+    "modify_ts": {"type" : "string"},
     "user_meta": {"type" : "object"},
     "sys_meta": {"type" : "object"},
+    "metadata": {"type" : "object"},
+    "read_access": {"type" : "array"},
+    "write_access": {"type" : "array"},
+    "url": {"type" : "string"},
+    "data": {"type" : "string"},
     
     "can_read": {"type" : "boolean"},
     "can_write": {"type" : "boolean"},
@@ -160,7 +176,8 @@ s_group = {
         },
 
         "meta" : s_meta,
-    }
+    },
+    "required" : ["obj"]
 }
 
 # Schema for a collection
@@ -176,7 +193,8 @@ s_coll = {
         },
 
         "meta" : s_meta,
-    }
+    },
+    "required" : ["obj"]
 }
 
 # Schema for a resource
@@ -192,13 +210,33 @@ s_resc = {
         },
 
         "meta" : s_meta,
-    }
+    },
+    "required" : ["obj"]
 }
 
 
 class Payload(object):
+    """Payload
+    
+    This is used to share information between components in the MQTT payload, 
+    each notifiaction has its own JSON schema it can use to validate that the 
+    payload contains the minimal information needed. This is the base class, 
+    every notification payload inherits from here
+    """
     
     def __init__(self, op_name, op_type, obj_type, json):
+        """Constructor
+        
+        :param op_name: The operation name (create, delete or update)
+        :type op_name: str
+        :param op_type: The operation type(request, success, fail)
+        :type op_type: str
+        :param obj_type: The type of the associated object(collection, resource,
+           group, user)
+        :type obj_type: str
+        :param json: The JSON dict that will be send  in the MQTT payload
+        :type json: dict
+        """
         self.op_name = op_name
         self.op_type = op_type
         self.obj_type = obj_type
@@ -209,25 +247,60 @@ class Payload(object):
         sender = payload_check(P_META_SENDER, self.json)
         if not sender:
             self.json['meta']['sender'] = cfg.sys_lib_user
+        req_id = payload_check(P_META_REQ_ID, self.json)
+        if not req_id:
+            self.json['meta']['req_id'] = new_request_id()
 
 
     def get_json(self):
+        """
+        Get the json dictionary that will be sent to MQTT
+        
+        :return: The json dict
+        :rtype: dict
+        """
         return self.json
 
 
     def get_operation_name(self):
+        """
+        Get the Operation name
+        
+        :return: The operation name
+        :rtype: str
+        """
         return self.op_name
 
 
     def get_operation_type(self):
+        """
+        Get the Operation type
+        
+        :return: The operation type
+        :rtype: str
+        """
         return self.op_type
 
 
     def get_object_type(self):
+        """
+        Get the Object type
+        
+        :return: The object type
+        :rtype: str
+        """
         return self.obj_type
 
 
     def get_object_key(self):
+        """
+        Get the key which can uniquely identifies the object in Cassandra,
+        depending on its type. It has to be found in the payload dict, at the 
+        right path ('/obj/path', '/obj/login' or '/onj/name').
+        
+        :return: The key that can be used in the CQL query
+        :rtype: str
+        """
         if self.obj_type in [OBJ_RESOURCE, OBJ_COLLECTION]:
             return payload_check("/obj/path", self.json, "Unknown_path")
         elif self.obj_type == OBJ_USER:
@@ -238,15 +311,38 @@ class Payload(object):
             return "Unknown_Object"
 
 
+    def get_req_id(self):
+        """
+        Try to find the defined id which has been used when the notification
+        was sent. If no information is found in the payload dict it generates a
+        new one so we can have a link somehow between request and result
+        
+        :return: The request id
+        :rtype: str
+        """
+        return payload_check(P_META_REQ_ID, self.json, new_request_id())
+
+
     def get_sender(self):
+        """
+        Try to find the sender who is trying to send the notification at 
+        '/msg/sender'. If no information is found in the payload dict it 
+        assumes that it comes from the system
+        
+        :return: The name of the sender
+        :rtype: str
+        """
         return payload_check(P_META_SENDER, self.json, cfg.sys_lib_user)
 
 
-    def set_msg(self, msg):
-        self.json['meta']['msg'] = msg
-
-
     def validate(self):
+        """
+        Validate the json according to the associated schema for this type
+        of notification
+        
+        :return: The result of the validation and an error message
+        :rtype: Tuple(bool, str)
+        """
         try:
             validate(self.json, self.schema)
         except ValidationError as e:
@@ -294,6 +390,8 @@ class PayloadCreateFail(PayloadCreate):
 
     def __init__(self, obj_type, json):
         if not payload_check(P_META_MSG, json):
+            if 'meta' not in json:
+                json['meta'] = {}
             json['meta']['msg'] = MSG_CREATE_FAILED
         super().__init__(OPT_FAIL, obj_type, json)
 
@@ -335,25 +433,25 @@ class PayloadDeleteFail(PayloadDelete):
 ################################################################################
 
 
-class PayloadCreateRequestCollection(PayloadCreateRequest):
+class PayloadCreateCollectionRequest(PayloadCreateRequest):
 
     def __init__(self, json):
         super().__init__(OBJ_COLLECTION, json)
         self.schema = s_coll
 
-class PayloadCreateRequestGroup(PayloadCreateRequest):
+class PayloadCreateGroupRequest(PayloadCreateRequest):
 
     def __init__(self, json):
         super().__init__(OBJ_GROUP, json)
         self.schema = s_group
 
-class PayloadCreateRequestResource(PayloadCreateRequest):
+class PayloadCreateResourceRequest(PayloadCreateRequest):
 
     def __init__(self, json):
         super().__init__(OBJ_RESOURCE, json)
         self.schema = s_resc
 
-class PayloadCreateRequestUser(PayloadCreateRequest):
+class PayloadCreateUserRequest(PayloadCreateRequest):
 
     def __init__(self, json):
         super().__init__(OBJ_USER, json)
@@ -361,25 +459,25 @@ class PayloadCreateRequestUser(PayloadCreateRequest):
 
 ####################################
 
-class PayloadCreateSuccessCollection(PayloadCreateSuccess):
+class PayloadCreateCollectionSuccess(PayloadCreateSuccess):
 
     def __init__(self, json):
         super().__init__(OBJ_COLLECTION, json)
         self.schema = s_coll
 
-class PayloadCreateSuccessGroup(PayloadCreateSuccess):
+class PayloadCreateGroupSuccess(PayloadCreateSuccess):
 
     def __init__(self, json):
         super().__init__(OBJ_GROUP, json)
         self.schema = s_group
 
-class PayloadCreateSuccessResource(PayloadCreateSuccess):
+class PayloadCreateResourceSuccess(PayloadCreateSuccess):
 
     def __init__(self, json):
         super().__init__(OBJ_RESOURCE, json)
         self.schema = s_resc
 
-class PayloadCreateSuccessUser(PayloadCreateSuccess):
+class PayloadCreateUserSuccess(PayloadCreateSuccess):
 
     def __init__(self, json):
         super().__init__(OBJ_USER, json)
@@ -387,7 +485,7 @@ class PayloadCreateSuccessUser(PayloadCreateSuccess):
 
 ####################################
 
-class PayloadCreateFailCollection(PayloadCreateFail):
+class PayloadCreateCollectionFail(PayloadCreateFail):
 
     def __init__(self, json):
         super().__init__(OBJ_COLLECTION, json)
@@ -403,10 +501,10 @@ class PayloadCreateFailCollection(PayloadCreateFail):
                 "msg": msg
             }
         }
-        return PayloadCreateFailCollection(payload_json)
+        return PayloadCreateCollectionFail(payload_json)
 
 
-class PayloadCreateFailGroup(PayloadCreateFail):
+class PayloadCreateGroupFail(PayloadCreateFail):
 
     def __init__(self, json):
         super().__init__(OBJ_GROUP, json)
@@ -422,10 +520,10 @@ class PayloadCreateFailGroup(PayloadCreateFail):
                 "msg": msg
             }
         }
-        return PayloadCreateFailGroup(payload_json)
+        return PayloadCreateGroupFail(payload_json)
 
 
-class PayloadCreateFailResource(PayloadCreateFail):
+class PayloadCreateResourceFail(PayloadCreateFail):
 
     def __init__(self, json):
         super().__init__(OBJ_RESOURCE, json)
@@ -441,10 +539,10 @@ class PayloadCreateFailResource(PayloadCreateFail):
                 "msg": msg
             }
         }
-        return PayloadCreateFailResource(payload_json)
+        return PayloadCreateResourceFail(payload_json)
 
 
-class PayloadCreateFailUser(PayloadCreateFail):
+class PayloadCreateUserFail(PayloadCreateFail):
 
     def __init__(self, json):
         super().__init__(OBJ_USER, json)
@@ -460,7 +558,7 @@ class PayloadCreateFailUser(PayloadCreateFail):
                 "msg": msg
             }
         }
-        return PayloadCreateFailUser(payload_json)
+        return PayloadCreateUserFail(payload_json)
 
 
 ####################################
@@ -468,25 +566,25 @@ class PayloadCreateFailUser(PayloadCreateFail):
 ####################################
 
 
-class PayloadUpdateRequestCollection(PayloadUpdateRequest):
+class PayloadUpdateCollectionRequest(PayloadUpdateRequest):
 
     def __init__(self, json):
         super().__init__(OBJ_COLLECTION, json)
         self.schema = s_coll
 
-class PayloadUpdateRequestGroup(PayloadUpdateRequest):
+class PayloadUpdateGroupRequest(PayloadUpdateRequest):
 
     def __init__(self, json):
         super().__init__(OBJ_GROUP, json)
         self.schema = s_group
 
-class PayloadUpdateRequestResource(PayloadUpdateRequest):
+class PayloadUpdateResourceRequest(PayloadUpdateRequest):
 
     def __init__(self, json):
         super().__init__(OBJ_RESOURCE, json)
         self.schema = s_resc
 
-class PayloadUpdateRequestUser(PayloadUpdateRequest):
+class PayloadUpdateUserRequest(PayloadUpdateRequest):
 
     def __init__(self, json):
         super().__init__(OBJ_USER, json)
@@ -494,25 +592,25 @@ class PayloadUpdateRequestUser(PayloadUpdateRequest):
 
 ####################################
 
-class PayloadUpdateSuccessCollection(PayloadUpdateSuccess):
+class PayloadUpdateCollectionSuccess(PayloadUpdateSuccess):
 
     def __init__(self, json):
         super().__init__(OBJ_COLLECTION, json)
         self.schema = s_coll
 
-class PayloadUpdateSuccessGroup(PayloadUpdateSuccess):
+class PayloadUpdateGroupSuccess(PayloadUpdateSuccess):
 
     def __init__(self, json):
         super().__init__(OBJ_GROUP, json)
         self.schema = s_group
 
-class PayloadUpdateSuccessResource(PayloadUpdateSuccess):
+class PayloadUpdateResourceSuccess(PayloadUpdateSuccess):
 
     def __init__(self, json):
         super().__init__(OBJ_RESOURCE, json)
         self.schema = s_resc
 
-class PayloadUpdateSuccessUser(PayloadUpdateSuccess):
+class PayloadUpdateUserSuccess(PayloadUpdateSuccess):
 
     def __init__(self, json):
         super().__init__(OBJ_USER, json)
@@ -520,7 +618,7 @@ class PayloadUpdateSuccessUser(PayloadUpdateSuccess):
 
 ####################################
 
-class PayloadUpdateFailCollection(PayloadUpdateFail):
+class PayloadUpdateCollectionFail(PayloadUpdateFail):
 
     def __init__(self, json):
         super().__init__(OBJ_COLLECTION, json)
@@ -536,10 +634,10 @@ class PayloadUpdateFailCollection(PayloadUpdateFail):
                 "msg": msg
             }
         }
-        return PayloadUpdateFailCollection(payload_json)
+        return PayloadUpdateCollectionFail(payload_json)
 
 
-class PayloadUpdateFailGroup(PayloadUpdateFail):
+class PayloadUpdateGroupFail(PayloadUpdateFail):
 
     def __init__(self, json):
         super().__init__(OBJ_GROUP, json)
@@ -555,10 +653,10 @@ class PayloadUpdateFailGroup(PayloadUpdateFail):
                 "msg": msg
             }
         }
-        return PayloadUpdateFailGroup(payload_json)
+        return PayloadUpdateGroupFail(payload_json)
 
 
-class PayloadUpdateFailResource(PayloadUpdateFail):
+class PayloadUpdateResourceFail(PayloadUpdateFail):
 
     def __init__(self, json):
         super().__init__(OBJ_RESOURCE, json)
@@ -574,10 +672,10 @@ class PayloadUpdateFailResource(PayloadUpdateFail):
                 "msg": msg
             }
         }
-        return PayloadUpdateFailResource(payload_json)
+        return PayloadUpdateResourceFail(payload_json)
 
 
-class PayloadUpdateFailUser(PayloadUpdateFail):
+class PayloadUpdateUserFail(PayloadUpdateFail):
 
     def __init__(self, json):
         super().__init__(OBJ_USER, json)
@@ -593,14 +691,14 @@ class PayloadUpdateFailUser(PayloadUpdateFail):
                 "msg": msg
             }
         }
-        return PayloadUpdateFailUser(payload_json)
+        return PayloadUpdateUserFail(payload_json)
 
 
 ####################################
 ####################################
 ####################################
 
-class PayloadDeleteRequestCollection(PayloadDeleteRequest):
+class PayloadDeleteCollectionRequest(PayloadDeleteRequest):
 
     def __init__(self, json):
         super().__init__(OBJ_COLLECTION, json)
@@ -613,17 +711,17 @@ class PayloadDeleteRequestCollection(PayloadDeleteRequest):
             "obj": {"path" : key},
             "meta": {"sender": sender}
         }
-        return PayloadDeleteRequestCollection(payload_json)
+        return PayloadDeleteCollectionRequest(payload_json)
 
 
-class PayloadDeleteRequestGroup(PayloadDeleteRequest):
+class PayloadDeleteGroupRequest(PayloadDeleteRequest):
 
     def __init__(self, json):
         super().__init__(OBJ_GROUP, json)
         self.schema = s_group
 
 
-class PayloadDeleteRequestResource(PayloadDeleteRequest):
+class PayloadDeleteResourceRequest(PayloadDeleteRequest):
 
     def __init__(self, json):
         super().__init__(OBJ_RESOURCE, json)
@@ -636,10 +734,10 @@ class PayloadDeleteRequestResource(PayloadDeleteRequest):
             "obj": {"path" : key},
             "meta": {"sender": sender}
         }
-        return PayloadDeleteRequestResource(payload_json)
+        return PayloadDeleteResourceRequest(payload_json)
 
 
-class PayloadDeleteRequestUser(PayloadDeleteRequest):
+class PayloadDeleteUserRequest(PayloadDeleteRequest):
 
     def __init__(self, json):
         super().__init__(OBJ_USER, json)
@@ -647,25 +745,25 @@ class PayloadDeleteRequestUser(PayloadDeleteRequest):
 
 ####################################
 
-class PayloadDeleteSuccessCollection(PayloadDeleteSuccess):
+class PayloadDeleteCollectionSuccess(PayloadDeleteSuccess):
 
     def __init__(self, json):
         super().__init__(OBJ_COLLECTION, json)
         self.schema = s_coll
 
-class PayloadDeleteSuccessGroup(PayloadDeleteSuccess):
+class PayloadDeleteGroupSuccess(PayloadDeleteSuccess):
 
     def __init__(self, json):
         super().__init__(OBJ_GROUP, json)
         self.schema = s_group
 
-class PayloadDeleteSuccessResource(PayloadDeleteSuccess):
+class PayloadDeleteResourceSuccess(PayloadDeleteSuccess):
 
     def __init__(self, json):
         super().__init__(OBJ_RESOURCE, json)
         self.schema = s_resc
 
-class PayloadDeleteSuccessUser(PayloadDeleteSuccess):
+class PayloadDeleteUserSuccess(PayloadDeleteSuccess):
 
     def __init__(self, json):
         super().__init__(OBJ_USER, json)
@@ -673,7 +771,7 @@ class PayloadDeleteSuccessUser(PayloadDeleteSuccess):
 
 ####################################
 
-class PayloadDeleteFailCollection(PayloadDeleteFail):
+class PayloadDeleteCollectionFail(PayloadDeleteFail):
 
     def __init__(self, json):
         super().__init__(OBJ_COLLECTION, json)
@@ -689,10 +787,10 @@ class PayloadDeleteFailCollection(PayloadDeleteFail):
                 "msg": msg
             }
         }
-        return PayloadDeleteFailCollection(payload_json)
+        return PayloadDeleteCollectionFail(payload_json)
 
 
-class PayloadDeleteFailGroup(PayloadDeleteFail):
+class PayloadDeleteGroupFail(PayloadDeleteFail):
 
     def __init__(self, json):
         super().__init__(OBJ_GROUP, json)
@@ -708,10 +806,10 @@ class PayloadDeleteFailGroup(PayloadDeleteFail):
                 "msg": msg
             }
         }
-        return PayloadDeleteFailGroup(payload_json)
+        return PayloadDeleteGroupFail(payload_json)
 
 
-class PayloadDeleteFailResource(PayloadDeleteFail):
+class PayloadDeleteResourceFail(PayloadDeleteFail):
 
     def __init__(self, json):
         super().__init__(OBJ_RESOURCE, json)
@@ -727,10 +825,10 @@ class PayloadDeleteFailResource(PayloadDeleteFail):
                 "msg": msg
             }
         }
-        return PayloadDeleteFailResource(payload_json)
+        return PayloadDeleteResourceFail(payload_json)
 
 
-class PayloadDeleteFailUser(PayloadDeleteFail):
+class PayloadDeleteUserFail(PayloadDeleteFail):
 
     def __init__(self, json):
         super().__init__(OBJ_USER, json)
@@ -746,7 +844,7 @@ class PayloadDeleteFailUser(PayloadDeleteFail):
                 "msg": msg
             }
         }
-        return PayloadDeleteFailUser(payload_json)
+        return PayloadDeleteUserFail(payload_json)
 
 
 

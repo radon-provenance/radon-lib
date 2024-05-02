@@ -1,4 +1,4 @@
-# Copyright 2021
+# Radon Copyright 2021, University of Oxford
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,23 +13,25 @@
 # limitations under the License.
 
 
-from dse.cqlengine import columns
-from dse.cqlengine.models import Model
+from cassandra.cqlengine import columns
+from cassandra.query import SimpleStatement
+from cassandra.cqlengine.models import Model
+from cassandra.cqlengine import connection
 import json
 
 from radon.model.config import cfg
 from radon.model.group import Group
 from radon.model.notification import (
-    create_fail_user,
-    create_success_user,
-    delete_success_user,
-    update_success_user
+    create_user_fail,
+    create_user_success,
+    delete_user_success,
+    update_user_success
 )
 from radon.model.payload import (
-    PayloadCreateFailUser,
-    PayloadCreateSuccessUser,
-    PayloadDeleteSuccessResource,
-    PayloadUpdateSuccessUser
+    PayloadCreateUserFail,
+    PayloadCreateUserSuccess,
+    PayloadDeleteUserSuccess,
+    PayloadUpdateUserSuccess
 )
 from radon.model.errors import UserConflictError
 from radon.util import (
@@ -39,6 +41,7 @@ from radon.util import (
     encrypt_password,
     verify_ldap_password,
     verify_password,
+    new_request_id,
 )
 
 
@@ -82,7 +85,7 @@ class User(Model):
     create_ts = columns.TimeUUID(default=default_time)
 
 
-    def add_group(self, groupname, sender=None):
+    def add_group(self, groupname, sender=None, req_id=None):
         """
         Add the user to a group
         
@@ -90,23 +93,27 @@ class User(Model):
         :type groupname: str
         :param sender: the name of the user who made the action
         :type sender: str, optional
+        :param req_id: The id of the request that was made to update a user
+        :type req_id: str, optional
         """
-        self.add_groups([groupname], sender)
+        self.add_groups([groupname], sender, req_id)
 
 
-    def add_groups(self, ls_group, sender=None):
+    def add_groups(self, ls_group, sender=None, req_id=None):
         """
         Add the user to a list of groups
         
         :param ls_group: The groups to be added to
-        :type groupname: List[str]
+        :type ls_group: List[str]
         :param sender: the name of the user who made the action
         :type sender: str, optional
+        :param req_id: The id of the request that was made to update a user
+        :type req_id: str, optional
         """
         new_groups = self.get_groups() + ls_group
         # remove duplicate
         new_groups = list(set(new_groups))
-        self.update(groups=new_groups, sender=sender)
+        self.update(groups=new_groups, sender=sender, req_id=req_id)
 
 
     def authenticate(self, password):
@@ -142,8 +149,9 @@ class User(Model):
         :type sender: str, optional
         
         :return: The new created user
-        :rtype: :class:`radon.model.User`
+        :rtype: :class:`radon.model.user.User`
         """
+        
         # sender is the name of the user who initiated the call, it has to
         # be removed for the Cassandra call
         if "sender" in kwargs:
@@ -151,12 +159,19 @@ class User(Model):
             del kwargs["sender"]
         else:
             sender = cfg.sys_lib_user
+
+        if "req_id" in kwargs:
+            req_id = kwargs['req_id']
+            del kwargs['req_id']
+        else:
+            req_id = new_request_id()
+
         kwargs["password"] = encrypt_password(kwargs["password"])
 
         if cls.objects.filter(login=kwargs["login"]).count():
-            payload = PayloadCreateFailUser.default(
+            payload = PayloadCreateUserFail.default(
                 kwargs.get("login", "Unknown"), "User already exists", sender)
-            create_fail_user(payload)
+            create_user_fail(payload)
             return None
 
         user = super(User, cls).create(**kwargs)
@@ -164,11 +179,13 @@ class User(Model):
         payload_json = {
             "obj": user.mqtt_get_state(),
             'meta' : {
-                "sender": sender
+                "sender": sender,
+                "req_id": req_id
             }
         }
-        create_success_user(PayloadCreateSuccessUser(payload_json))
+        create_user_success(PayloadCreateUserSuccess(payload_json))
         return user
+
 
     @classmethod
     def delete_user(cls, name):
@@ -180,8 +197,7 @@ class User(Model):
         user = cls.find(name)
         if not user:
             return
-        user.delete()       
-        
+        user.delete()
         
         
     def delete(self, **kwargs):
@@ -190,6 +206,8 @@ class User(Model):
         
         :param sender: The name of the user who made the action
         :type sender: str, optional
+        :param req_id: The id of the request that was made to create a collection
+        :type req_id: str, optional
         """
         if "sender" in kwargs:
             sender = kwargs['sender']
@@ -197,14 +215,22 @@ class User(Model):
         else:
             sender = cfg.sys_lib_user
 
+        if "req_id" in kwargs:
+            req_id = kwargs['req_id']
+            del kwargs['req_id']
+        else:
+            req_id = new_request_id()
+
         payload_json = {
-            "obj": {"login": self.mqtt_get_state()},
-            'meta' : {"sender": sender}
+            "obj": {"login": self.login},
+            'meta' : {
+                "sender": sender,
+                "req_id": req_id
+            }
         }
 
         super(User, self).delete()
-
-        delete_success_user(PayloadDeleteSuccessResource(payload_json))
+        delete_user_success(PayloadDeleteUserSuccess(payload_json))
 
 
     @classmethod
@@ -216,9 +242,10 @@ class User(Model):
         :type login: str
         
         :return: The user which has been found
-        :rtype: :class:`radon.model.User`
+        :rtype: :class:`radon.model.user.User`
         """
         return cls.objects.filter(login=login).first()
+
 
     def get_groups(self):
         """
@@ -227,7 +254,22 @@ class User(Model):
         :return: The list of groups
         :rtype: List[str]
         """
-        return self.groups
+        session = connection.get_session()
+        keyspace = cfg.dse_keyspace
+        session.set_keyspace(keyspace)
+        query = SimpleStatement(
+            u"""SELECT groups FROM user
+            WHERE login=%s""")
+        rows = session.execute(query, (self.login,))
+        if rows:
+            groups = rows.one().get("groups", [])
+            if groups:
+                return groups
+            else:
+                return []
+        else:
+            return []
+
 
     def is_active(self):
         """
@@ -238,6 +280,7 @@ class User(Model):
         """
         return self.active
 
+
     def is_authenticated(self):
         """
         Check if the user is authenticated
@@ -247,6 +290,7 @@ class User(Model):
         """
         return True
 
+
     def mqtt_get_state(self):
         """
         Get the user state that will be used in the payload
@@ -255,17 +299,20 @@ class User(Model):
         :rtype: dict
         """
         payload = dict()
-        payload["uuid"] = self.uuid
+        if self.uuid:
+            payload["uuid"] = self.uuid
         payload["login"] = self.login
-        payload["fullname"] = self.fullname
-        payload["email"] = self.email
+        if self.fullname:
+            payload["fullname"] = self.fullname
+        if self.email:
+            payload["email"] = self.email
         payload["active"] = self.active
         payload["administrator"] = self.administrator
-        payload["groups"] = [g.name for g in Group.find_all(self.groups)]
+        payload["groups"] = [g.name for g in Group.find_all(self.get_groups())]
         return payload
 
 
-    def rm_group(self, groupname, sender=None):
+    def rm_group(self, groupname, sender=None, req_id=None):
         """
         Remove the user from a group.
         
@@ -273,11 +320,13 @@ class User(Model):
         :type groupname: str
         :param sender: the name of the user who made the action
         :type sender: str, optional
+        :param req_id: The id of the request that was made to update a user
+        :type req_id: str, optional
         """
-        self.rm_groups([groupname])
+        self.rm_groups([groupname], sender, req_id)
 
 
-    def rm_groups(self, ls_group, sender=None):
+    def rm_groups(self, ls_group, sender=None, req_id=None):
         """
         Remove the user from a list of groups.
         
@@ -285,11 +334,13 @@ class User(Model):
         :type groupname: List[str]
         :param sender: the name of the user who made the action
         :type sender: str, optional
+        :param req_id: The id of the request that was made to update a user
+        :type req_id: str, optional
         """
         new_groups = set(self.get_groups()) - set(ls_group)
         # remove duplicate
         new_groups = list(set(new_groups))
-        self.update(groups=new_groups, sender=sender)
+        self.update(groups=new_groups, sender=sender, req_id=req_id)
 
 
     def to_dict(self):
@@ -307,8 +358,9 @@ class User(Model):
             "administrator": self.administrator,
             "active": self.active,
             "ldap": self.ldap,
-            "groups": [g.to_dict() for g in Group.find_all(self.groups)],
+            "groups": [g.to_dict() for g in Group.find_all(self.get_groups())],
         }
+
 
     def update(self, **kwargs):
         """
@@ -319,9 +371,11 @@ class User(Model):
         :type sender: str, optional
         :param password: The plain password to encrypt
         :type password: str
+        :param req_id: The id of the request that was made to update a user
+        :type req_id: str, optional
         
         :return: The modified user
-        :rtype: :class:`radon.model.User`
+        :rtype: :class:`radon.model.user.User`
         """
         pre_state = self.mqtt_get_state()
         # If we want to update the password we need to encrypt it first
@@ -331,10 +385,17 @@ class User(Model):
 
         if "login" in kwargs:
             del kwargs["login"]
+
         sender = cfg.sys_lib_user
         if "sender" in kwargs:
             sender = kwargs['sender']
             del kwargs['sender']
+
+        if "req_id" in kwargs:
+            req_id = kwargs['req_id']
+            del kwargs['req_id']
+        else:
+            req_id = new_request_id()
 
         super(User, self).update(**kwargs)
         user = User.find(self.login)
@@ -344,9 +405,12 @@ class User(Model):
             payload_json = {
                 "obj" : pre_state,
                 "new": post_state,
-                "meta": {"sender": sender}
+                "meta": {
+                    "sender": sender,
+                    "req_id": req_id
+                }
             }
-            update_success_user(PayloadUpdateSuccessUser(payload_json))
+            update_user_success(PayloadUpdateUserSuccess(payload_json))
         return self
 
 

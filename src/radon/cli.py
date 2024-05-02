@@ -1,4 +1,4 @@
-# Copyright 2021
+# Radon Copyright 2021, University of Oxford
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -666,9 +666,9 @@ class RadonApplication():
 def main():
     """Main function"""
     logging.basicConfig(level=logging.WARNING)
-    logging.getLogger("dse.policies").setLevel(logging.WARNING)
-    logging.getLogger("dse.cluster").setLevel(logging.WARNING)
-    logging.getLogger("dse.cqlengine.management").setLevel(logging.WARNING)
+    logging.getLogger("cassandra.policies").setLevel(logging.WARNING)
+    logging.getLogger("cassandra.cluster").setLevel(logging.WARNING)
+    logging.getLogger("cassandra.cqlengine.management").setLevel(logging.WARNING)
     arguments = docopt.docopt(
         __doc_opt__, version="Radon Admin CLI {}".format(radon.__version__)
     )

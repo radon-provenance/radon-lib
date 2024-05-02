@@ -1,4 +1,4 @@
-# Copyright 2021
+# Radon Copyright 2021, University of Oxford
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -52,6 +52,14 @@ GRP3_NAME = uuid.uuid4().hex
 USR1_NAME = uuid.uuid4().hex
 USR2_NAME = uuid.uuid4().hex
 
+
+def create_data_object():
+    myFactory = Faker()
+    content = myFactory.text()
+    do = DataObject.create(content.encode())
+    return do
+
+
 def setup_module():
     cfg.dse_keyspace = TEST_KEYSPACE
     initialise()
@@ -69,7 +77,7 @@ def setup_module():
     password = uuid.uuid4().hex
     administrator = True
     groups = [GRP1_NAME]
-    user1 = User.create(name=user_name,
+    user1 = User.create(login=user_name,
                         email=email,
                         password=password, 
                         administrator=administrator,
@@ -80,7 +88,7 @@ def setup_module():
     password = uuid.uuid4().hex
     administrator = False
     groups = [GRP1_NAME, GRP2_NAME]
-    user2 = User.create(name=user_name,
+    user2 = User.create(login=user_name,
                         email=email,
                         password=password, 
                         administrator=administrator,
@@ -90,59 +98,6 @@ def setup_module():
 
 def teardown_module(module):
     destroy()
-
-
-def create_data_object():
-    myFactory = Faker()
-    content = myFactory.text()
-    do = DataObject.create(content.encode())
-    return do
-
-
-def test_resource():
-    coll_name = uuid.uuid4().hex
- 
-    with pytest.raises(NoSuchCollectionError):
-        resc = Resource.create("/{}".format(coll_name), uuid.uuid4().hex)
-
-    coll = Collection.create("/", coll_name)
-    do = create_data_object()
-    
-    resc_name = uuid.uuid4().hex
-    resc = Resource.create(coll.path, resc_name, 
-                           url = "{}{}".format(cfg.protocol_cassandra, do.uuid))
-    assert str(resc) == resc.path
-    assert resc.get_name() == resc_name
-    
-    with pytest.raises(ResourceConflictError):
-        resc = Resource.create(coll.path, resc_name)
-
-    resc.delete()
-    # Check resource is gone
-    resc = Resource.find(resc.path)
-    assert resc == None
-
-    do = create_data_object()
-    resc = Resource.create(coll.path, resc_name, 
-                           url = "{}{}".format(cfg.protocol_cassandra, do.uuid))
-    resc.delete()
-    
-    resc = Resource.create(coll.path, resc_name, url = "http://www.google.fr")
-    assert resc.get_name() == resc_name + '?'
-    resc.delete()
-    
-    # Check deleting resource also deleted data object
-    do = DataObject.find(do.uuid)
-    assert do == None
-    
-    do = create_data_object()
-    resc = Resource.create(coll.path, resc_name, 
-                           url = "{}{}".format(cfg.protocol_cassandra, do.uuid),
-                           size=do.size)
-    assert resc.get_size() == do.size
-    
-    resc.delete()
-    coll.delete()
 
 
 def test_acl():
@@ -178,8 +133,14 @@ def test_acl():
         }
     ]
     resc.update_acl_cdmi(cdmi_acl)
-    
     resc.delete()
+    
+    resc2 = Resource.create(coll.path, uuid.uuid4().hex, read_access=list_read,
+                            write_access=list_write)
+    read_access, write_access = resc2.get_acl_list()
+    assert read_access == [GRP1_NAME]
+    assert write_access == [GRP1_NAME]
+    resc2.delete()
 
 
     # Read resource stored in Cassandra
@@ -229,8 +190,6 @@ def test_acl():
     assert resc.get_authorized_actions(User.find(USR2_NAME)) == {'delete', 'read', 'edit', 'write'}
     resc.delete()
 
-   
-    
     coll.delete()
 
 
@@ -266,6 +225,70 @@ def test_chunk_content():
     coll.delete()
 
 
+def test_create_acl_fail(mocker):
+    list_read = [GRP1_NAME]
+    list_write = [GRP1_NAME]
+    myFactory = Faker()
+    content = myFactory.text()
+
+    # Create a new resource with a random name
+    do = DataObject.create(content.encode())
+    resc_name = uuid.uuid4().hex
+    resc = Resource.create('/', resc_name, 
+                           url = "{}{}".format(cfg.protocol_cassandra, do.uuid))
+    
+    mocker.patch('radon.model.resource.acemask_to_str', return_value="wrong_oper")
+    resc.create_acl_list(list_read, list_write)
+    resc = Resource.find('/{}'.format(resc_name))
+    # Test get_acl_list wrong operation name
+    acl_list = resc.get_acl_list()
+    assert acl_list == ([], [])
+
+    resc.delete()
+
+def test_create_with_acl_via_metadata():
+    grp_name = uuid.uuid4().hex
+    grp = Group.create(name=grp_name)
+    
+    list_read = [grp_name]
+    list_write = [grp_name]
+
+    resc_name = uuid.uuid4().hex
+    
+    metadata = {
+        "cdmi_acl": [
+            {'identifier': grp_name,
+             'acetype': 'ALLOW',
+             'aceflags': "INHERITED",
+             'acemask': "READ"
+            }
+        ]
+    }
+    resc = Resource.create('/', resc_name, metadata=metadata)
+
+    resc.delete()
+    grp.delete()
+
+def test_create_fail():
+    # Container dpesn't exist
+    resc = Resource.create(uuid.uuid4().hex,  uuid.uuid4().hex)
+    assert resc == None 
+    
+    resc_name = uuid.uuid4().hex
+    resc = Resource.create("/", resc_name)
+    resc_fail = Resource.create("/", resc_name)
+    assert resc_fail == None
+    
+    resc.delete()
+
+
+def test_delete():
+    resc_name = uuid.uuid4().hex
+    resc = Resource.create("/", resc_name)
+    
+    resc.delete(sender="radon-lib")
+
+
 def test_dict():
     coll_name = uuid.uuid4().hex
     coll = Collection.create("/", coll_name)
@@ -291,9 +314,69 @@ def test_dict():
     assert resc_dict['is_reference'] == False
     assert resc_dict['can_read']
     assert resc_dict['can_write']
-    assert resc_dict['id'] == resc.uuid
+    assert resc_dict['uuid'] == resc.uuid
     
     assert resc.simple_dict() == resc.to_dict()
+    
+    resc.delete()
+    coll.delete()
+
+
+def test_find():
+    resc = Resource.find("/")
+    assert resc == None
+    
+    # test NoUrlResource
+    resc_name = uuid.uuid4().hex
+    resc = Resource.create("/", resc_name)
+    resc.node.object_url = None
+    
+    resc_find = Resource.find(resc.path)
+    resc.delete()
+    
+
+
+def test_find_fail():
+    resc = Resource.find("/{}".format(uuid.uuid4().hex), "0")
+    assert resc == None
+
+
+
+def test_resource():
+    coll_name = uuid.uuid4().hex
+
+    coll = Collection.create("/", coll_name)
+    do = create_data_object()
+    
+    resc_name = uuid.uuid4().hex
+    resc = Resource.create(coll.path, resc_name, 
+                           url = "{}{}".format(cfg.protocol_cassandra, do.uuid))
+    assert str(resc) == resc.path
+    assert resc.get_name() == resc_name
+    
+    resc.delete()
+    # Check resource is gone
+    resc = Resource.find(resc.path)
+    assert resc == None
+
+    do = create_data_object()
+    resc = Resource.create(coll.path, resc_name, 
+                           url = "{}{}".format(cfg.protocol_cassandra, do.uuid))
+    resc.delete()
+    
+    resc = Resource.create(coll.path, resc_name, url = "http://www.google.fr")
+    assert resc.get_name() == resc_name + '?'
+    resc.delete()
+    
+    # Check deleting resource also deleted data object
+    do = DataObject.find(do.uuid)
+    assert do == None
+    
+    do = create_data_object()
+    resc = Resource.create(coll.path, resc_name, 
+                           url = "{}{}".format(cfg.protocol_cassandra, do.uuid),
+                           size=do.size)
+    assert resc.get_size() == do.size
     
     resc.delete()
     coll.delete()
@@ -309,7 +392,8 @@ def test_metadata():
     
     metadata = {
         "test" : "val",
-        "test_list" : ['t', 'e', 's', 't']
+        "test_list" : ['t', 'e', 's', 't'],
+        "test_json" : '["t", "e", "s", "t"]'
     }
     
     # Checksum passed at creation 
@@ -324,6 +408,7 @@ def test_metadata():
 
     assert meta_dict['test'] == metadata['test']
     assert meta_dict['test_list'] == metadata['test_list']
+    assert resc.get_user_meta_key("test_json") == '["t", "e", "s", "t"]'
     
     sys_meta = resc.get_cdmi_sys_meta()
     assert "radon_create_ts" in sys_meta
@@ -351,8 +436,6 @@ def test_metadata():
     
     resc.delete()
     coll.delete()
-    
-    
 
 
 def test_path():
@@ -432,7 +515,7 @@ def test_update():
     resc_name = uuid.uuid4().hex
     resc = Resource.create(coll.path, resc_name, 
                            url = "{}{}".format(cfg.protocol_cassandra, do.uuid))
-    resc.update(username="test1", metadata=metadata)
+    resc.update(sender="test1", metadata=metadata)
     resc = Resource.find(resc.path)
     assert resc.get_cdmi_user_meta()['test'] == metadata['test']
     resc.delete()
@@ -444,7 +527,7 @@ def test_update():
                            url = "{}{}".format(cfg.protocol_cassandra, do.uuid))
     DataObject.delete_id(do.uuid)
     do = DataObject.create(content.encode())
-    resc.update(object_url = "{}{}".format(cfg.protocol_cassandra, do.uuid))
+    resc.update(url = "{}{}".format(cfg.protocol_cassandra, do.uuid))
     resc = Resource.find(resc.path)
     assert resc.get_size() == len(content)
     resc.delete()
@@ -460,31 +543,64 @@ def test_update():
     coll.delete()
 
 
-def test_find_fail():
-    resc = Resource.find("/{}".format(uuid.uuid4().hex), "0")
-    assert resc == None
-
-
-def test_create_acl_fail(mocker):
-    list_read = [GRP1_NAME]
-    list_write = [GRP1_NAME]
-    myFactory = Faker()
-    content = myFactory.text()
-
-    # Create a new resource with a random name
-    do = DataObject.create(content.encode())
-    resc_name = uuid.uuid4().hex
-    resc = Resource.create('/', resc_name, 
-                           url = "{}{}".format(cfg.protocol_cassandra, do.uuid))
+def test_update_acl():
+    grp_name = uuid.uuid4().hex
+    grp = Group.create(name=grp_name)
     
-    mocker.patch('radon.model.resource.acemask_to_str', return_value="wrong_oper")
-    resc.create_acl_list(list_read, list_write)
-    resc = Resource.find('/{}'.format(resc_name))
-    # Test get_acl_list wrong operation name
-    acl_list = resc.get_acl_list()
-    assert acl_list == ([], [])
+    list_read = [grp_name]
+    list_write = [grp_name]
+
+    resc_name = uuid.uuid4().hex
+    resc = Resource.create('/', resc_name)
+    resc.update(read_access=list_read, write_access=list_write)
 
     resc.delete()
+    grp.delete()
+
+
+def test_update_acl_list():
+    grp_name = uuid.uuid4().hex
+    grp = Group.create(name=grp_name)
+    
+    list_read = [grp_name]
+    list_write = [grp_name]
+
+    resc_name = uuid.uuid4().hex
+    resc = Resource.create('/', resc_name)
+    
+    resc.update_acl_list(list_read, list_write)
+
+    resc_f = Resource.find(resc.name)
+    acl_list = resc_f.get_acl_list()
+    assert acl_list == (list_read, list_write)
+
+    resc.delete()
+    grp.delete()
+
+
+def test_update_acl_via_metadata():
+    grp_name = uuid.uuid4().hex
+    grp = Group.create(name=grp_name)
+    
+    list_read = [grp_name]
+    list_write = [grp_name]
+
+    resc_name = uuid.uuid4().hex
+    resc = Resource.create('/', resc_name)
+    
+    metadata = {
+        "cdmi_acl": [
+            {'identifier': grp_name,
+             'acetype': 'ALLOW',
+             'aceflags': "INHERITED",
+             'acemask': "READ"
+            }
+        ]
+    }
+    resc.update(metadata=metadata)
+
+    resc.delete()
+    grp.delete()
 
 
 def test_user_can():

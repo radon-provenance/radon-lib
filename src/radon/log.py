@@ -1,4 +1,4 @@
-# Copyright 2021
+# Radon Copyright 2021, University of Oxford
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,6 +21,9 @@ def init_logger(name, cfg):
     
     :param name: Name of the logger
     :type name: str
+    :param cfg: The global Config object
+    :type cfg: :class:`radon.model.config.LocalConfig`
+
     :return: the logger
     :rtype: :class:`logging.Logger`
     """

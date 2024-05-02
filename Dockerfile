@@ -13,7 +13,8 @@ ENV CQLENG_ALLOW_SCHEMA_MANAGEMENT 1
 # Install prerequisites
 RUN apt-get -y update &&  \
     apt-get install -y nano less libldap2-dev libsasl2-dev && \
-    pip install --upgrade pip
+    pip install --upgrade pip && \
+    apt clean
 
 # Create destination folders
 RUN mkdir -p /code/radon-lib

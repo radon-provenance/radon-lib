@@ -1,4 +1,4 @@
-# Copyright 2021
+# Radon Copyright 2021, University of Oxford
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,8 +13,8 @@
 # limitations under the License.
 
 
-from dse.cqlengine import connection
-from dse.query import SimpleStatement
+from cassandra.cqlengine import connection
+from cassandra.query import SimpleStatement
 import json
 
 from radon.model.config import cfg
@@ -31,6 +31,7 @@ from radon.util import (
     meta_cdmi_to_cassandra,
     metadata_to_list,
     merge,
+    new_request_id,
     now,
     split,
 )
@@ -40,16 +41,16 @@ from radon.model.errors import (
     NoSuchCollectionError
 )
 from radon.model.notification import (
-    create_fail_collection,
-    create_success_collection,
-    delete_success_collection,
-    update_success_collection,
+    create_collection_fail,
+    create_collection_success,
+    delete_collection_success,
+    update_collection_success,
 )
 from radon.model.payload import (
-    PayloadCreateFailCollection,
-    PayloadCreateSuccessCollection,
-    PayloadDeleteSuccessCollection,
-    PayloadUpdateSuccessCollection
+    PayloadCreateCollectionFail,
+    PayloadCreateCollectionSuccess,
+    PayloadDeleteCollectionSuccess,
+    PayloadUpdateCollectionSuccess,
 )
 
 
@@ -61,7 +62,7 @@ class Collection(object):
     object in the Cassandra database.
     
     :param node: The TreeNode row that corresponds to the collection
-    :type node: :class:`radon.model.TreeNode`
+    :type node: :class:`radon.model.tree_node.TreeNode`
     :param is_root: The root collection usually needs special treatment
     :type is_root: bool
     :param name: The name of the collection, should end with '/'
@@ -79,7 +80,7 @@ class Collection(object):
         Create the collection object based on the TreeNode row from Cassandra
         
         :param node: The TreeNode row that corresponds to the collection
-        :type node: :class:`radon.model.TreeNode`
+        :type node: :class:`radon.model.tree_node.TreeNode`
         """
         self.node = node
 
@@ -100,7 +101,7 @@ class Collection(object):
 
     @classmethod
     def create(cls, container, name, metadata=None, sender=None, 
-               read_access=None, write_access=None):
+               read_access=None, write_access=None, req_id=None):
         """
         Create a new collection
         
@@ -112,9 +113,15 @@ class Collection(object):
         :type metadata: dict, optional
         :param sender: The name of the user who created the collection
         :type sender: str, optional
+        :param read_access: A list of groups with a read access
+        :type read_access: list[str]
+        :param write_access: A list of groups with a write access
+        :type write_access: list[str]
+        :param req_id: The id of the request that was made to create a collection
+        :type req_id: str, optional
         
         :return: The new Collection object
-        :rtype: :class:`radon.model.Collection`
+        :rtype: :class:`radon.model.collection.Collection`
         """
         from radon.model.resource import Resource
                 
@@ -131,20 +138,20 @@ class Collection(object):
         # Check if parent collection exists
         parent = Collection.find(container)
         if parent is None:
-            create_fail_collection(
-                PayloadCreateFailCollection.default(
+            create_collection_fail(
+                PayloadCreateCollectionFail.default(
                     path, "Parent container doesn't exist", sender))
             return None
         resource = Resource.find(merge(container, name))
         if resource is not None:
-            create_fail_collection(
-                PayloadCreateFailCollection.default(
+            create_collection_fail(
+                PayloadCreateCollectionFail.default(
                     path, "Conflict with a resource", sender))
             return None
         collection = Collection.find(path)
         if collection is not None:
-            create_fail_collection(
-                PayloadCreateFailCollection.default(
+            create_collection_fail(
+                PayloadCreateCollectionFail.default(
                     path, "Conflict with a collection", sender))
             return None
 
@@ -174,7 +181,9 @@ class Collection(object):
             "obj": new.mqtt_get_state(),
             "meta": {"sender": sender}
         }
-        create_success_collection(PayloadCreateSuccessCollection(payload_json))
+        if req_id:
+            payload_json['meta']['req_id'] = req_id
+        create_collection_success(PayloadCreateCollectionSuccess(payload_json))
 
         return new
 
@@ -185,7 +194,7 @@ class Collection(object):
         Create the root Collection to initialise the hierarchy
         
         :return: The Collection object for the root
-        :rtype: :class:`radon.model.Collection`
+        :rtype: :class:`radon.model.collection.Collection`
         """
         now_date = now()
         sys_meta = {
@@ -218,7 +227,7 @@ class Collection(object):
         if not parent:
             return
         else:
-            parent.delete(sender)
+            parent.delete(sender=sender)
 
 
     @classmethod
@@ -233,7 +242,7 @@ class Collection(object):
         :type version: int, optional
         
         :return: The Collection object which maps the TreeNode
-        :rtype: :class:`radon.model.Collection`
+        :rtype: :class:`radon.model.collection.Collection`
         """
         # If version is not provided we need to query first to get all versions
         # and read the current version in any row (static column)
@@ -271,7 +280,7 @@ class Collection(object):
         Return the root collection, Create it if it doesn't exist
         
         :return: The Collection object for the root
-        :rtype: :class:`radon.model.Collection`
+        :rtype: :class:`radon.model.collection.Collection`
         """
         root = Collection.find("/")
         if not root:
@@ -291,32 +300,14 @@ class Collection(object):
         self.node.create_acl_list(read_access, write_access)
 
 
-    def get_create_ts(self):
-        """
-        Get the creation timestamp
-        
-        :return: The timestamp stored in the system metadata
-        :rtype: datetime
-        """
-        return self.node.sys_meta.get(cfg.meta_create_ts)
-
-
-    def get_modify_ts(self):
-        """
-        Get the modification timestamp
-        
-        :return: The timestamp stored in the system metadata
-        :rtype: datetime
-        """
-        return self.node.sys_meta.get(cfg.meta_modify_ts)
-
-
     def delete(self, **kwargs):
         """
         Delete a collection and the associated row in the tree_node table
         
         :param sender: The name of the user who deleted the collection
         :type sender: str, optional
+        :param req_id: The id of the request that was made to create a collection
+        :type req_id: str, optional
         """
         from radon.model.resource import Resource
         if "sender" in kwargs:
@@ -324,25 +315,34 @@ class Collection(object):
             del kwargs['sender']
         else:
             sender = cfg.sys_lib_user
+
+        if "req_id" in kwargs:
+            req_id = kwargs['req_id']
+            del kwargs['req_id']
+        else:
+            req_id = new_request_id()
  
         if self.is_root:
             return
-
+        
         # We don't need the suffixes for the resources, otherwise we won't 
         # find them
         child_container, child_dataobject = self.get_child(False)
         for child_str in child_container:
             child = Collection.find(self.path + child_str)
             if child:
-                child.delete()
+                child.delete(sender=sender, req_id=req_id)
         for child_str in child_dataobject:
             child = Resource.find(self.path + child_str)
             if child:
-                child.delete()
+                child.delete(sender=sender, req_id=req_id)
 
         payload_json = {
             "obj": {"path": self.path},
-            "meta": {"sender": sender}
+            "meta": {
+                "sender": sender,
+                "req_id": req_id
+            }
         }
 
         session = connection.get_session()
@@ -351,7 +351,7 @@ class Collection(object):
         query = SimpleStatement("""DELETE FROM tree_node WHERE container=%s and name=%s""")
         session.execute(query, (self.container, self.name, ))
 
-        delete_success_collection(PayloadDeleteSuccessCollection(payload_json))
+        delete_collection_success(PayloadDeleteCollectionSuccess(payload_json))
 
 
     def get_acl_dict(self):
@@ -361,7 +361,7 @@ class Collection(object):
         :return: The ACL associated to the collection
         :rtype: dict
         """
-        return self.node.acl
+        return self.node.get_acl()
 
 
     def get_acl_list(self):
@@ -373,7 +373,7 @@ class Collection(object):
         """
         read_access = []
         write_access = []
-        for gid, ace in self.node.acl.items():
+        for gid, ace in self.node.get_acl().items():
             oper = acemask_to_str(ace.acemask, False)
             if oper == "read":
                 read_access.append(gid)
@@ -394,7 +394,12 @@ class Collection(object):
 
 
     def get_acl_metadata(self):
-        """Return a dictionary of acl based on the Collection schema"""
+        """
+        Return a dictionary of acl based on the Collection schema
+
+        :return: The acl stored in a dict
+        :rtype: dict
+        """
         return serialize_acl_metadata(self)
 
 
@@ -403,11 +408,13 @@ class Collection(object):
         Get available actions for a user according to the groups it belongs
         
         :param user: The user we want to check
-        :type user: :class:`radon.model.User`
+        :type user: :class:`radon.model.user.User`
         
         :return: the set of actions the user can do
         :rtype: Set[str]
         """
+        if not user:
+            return set([])
         if (user.administrator):
             return set(["read", "write", "delete", "edit"])
         # Check permission on the parent container if there's no action
@@ -421,9 +428,10 @@ class Collection(object):
                 parent_container = Collection.find(self.container)
                 return parent_container.get_authorized_actions(user)
         actions = set([])
-        for gid in user.groups + ["AUTHENTICATED@"]:
-            if gid in self.node.acl:
-                ace = self.node.acl[gid]
+        acl = self.node.get_acl()
+        for gid in user.get_groups() + [cfg.auth_group]:
+            if gid in acl:
+                ace = acl[gid]
                 level = acemask_to_str(ace.acemask, False)
                 if level == "read":
                     actions.add("read")
@@ -437,6 +445,26 @@ class Collection(object):
                     actions.add("delete")
                     actions.add("edit")
         return actions
+
+
+    def get_create_ts(self):
+        """
+        Get the creation timestamp
+        
+        :return: The timestamp stored in the system metadata
+        :rtype: datetime
+        """
+        return self.node.sys_meta.get(cfg.meta_create_ts)
+
+
+    def get_modify_ts(self):
+        """
+        Get the modification timestamp
+        
+        :return: The timestamp stored in the system metadata
+        :rtype: datetime
+        """
+        return self.node.sys_meta.get(cfg.meta_modify_ts)
 
 
     def get_child(self, add_ref_suffix=True):
@@ -545,13 +573,6 @@ class Collection(object):
         return decode_meta(self.node.user_meta.get(key, ""))
 
 
-#     def index(self):
-#         from radon.models import SearchIndex
-# 
-#         self.reset()
-#         SearchIndex.index(self, ["name", "metadata"])
-
-
     def mqtt_get_state(self):
         """
         Get the collection state that will be used in the payload
@@ -563,43 +584,19 @@ class Collection(object):
         payload["uuid"] = self.uuid
         payload["container"] = self.container
         payload["name"] = self.name
+        payload["path"] = self.path
         payload["create_ts"] = self.get_create_ts()
         payload["modify_ts"] = self.get_modify_ts()
         payload["metadata"] = self.get_cdmi_user_meta()
         return payload
 
 
-    def mqtt_payload(self, pre_state, post_state):
-        """
-        Get a string version of the payload of the message, with the pre and
-        post states. The pre and post states are stored in a dictionary and
-        dumped in a JSON string.
-        
-        :param pre_state: The dictionary which describes the state of the 
-          collection before a modification
-        :type pre_state: dict
-        :param post_state: The dictionary which describes the state of the 
-          collection after a modification
-        :type post_state: dict
-        
-        :return: The payload as a JSON string
-        :rtype: str
-        """
-        payload = dict()
-        payload["pre"] = pre_state
-        payload["post"] = post_state
-        return json.dumps(payload)
-
-
-#     def reset(self):
-#         from radon.models import SearchIndex
-# 
-#         SearchIndex.reset(self.path)
-
-
     def to_dict(self, user=None):
         """
         Return a dictionary which describes a collection for the web ui
+        
+        :param user: If present, display the actions this specific user can do
+        :type user: :class:`radon.model.user.User`
         
         :return: The dictionary with the information needed for the UI
         :rtype: dict
@@ -624,21 +621,41 @@ class Collection(object):
     def update(self, **kwargs):
         """
         Update a collection. We intercept the call to encode the metadata if we
-        modify it. Metadata passed in this method is user meta.
+        modify it. Metadata passed in this method are stored as user metadata.
         
         :param sender: the name of the user who made the action
         :type sender: str, optional
         :param metadata: The plain password to encrypt
         :type metadata: dict
+        :param read_access: A list of groups with a read access
+        :type read_access: list[str]
+        :param write_access: A list of groups with a write access
+        :type write_access: list[str]
+        :param req_id: The id of the request that was made to create a collection
+        :type req_id: str, optional
+        
+        :return: The updated collection
+        :rtype: :class:`radon.model.collection.Collection`
         """
         pre_state = self.mqtt_get_state()
         now_date = now()
         if "metadata" in kwargs:
+            metadata = kwargs["metadata"]
+            if "cdmi_acl" in metadata:
+                # We treat acl metadata in a specific way
+                cdmi_acl = metadata["cdmi_acl"]
+                del metadata["cdmi_acl"]
+                self.update_acl_cdmi(cdmi_acl)
             # Transform the metadata in cdmi format to the format stored in
             # Cassandra
-            kwargs["user_meta"] = meta_cdmi_to_cassandra(kwargs["metadata"])
+            self.node.user_meta = {}
+            self.node.save()
+            kwargs["user_meta"] = metadata
             del kwargs["metadata"]
-        
+
+        if "user_meta" in kwargs:
+            kwargs["user_meta"] = meta_cdmi_to_cassandra(kwargs["user_meta"])
+            
         sys_meta = self.node.sys_meta
         sys_meta[cfg.meta_modify_ts] = encode_meta(now_date)
         kwargs["sys_meta"] = sys_meta
@@ -659,8 +676,14 @@ class Collection(object):
         else:
             write_access = []
 
+        if "req_id" in kwargs:
+            req_id = kwargs['req_id']
+            del kwargs['req_id']
+        else:
+            req_id = new_request_id()
+
         self.node.update(**kwargs)
-        
+
         if read_access or write_access:
             self.update_acl_list(read_access, write_access)
         
@@ -671,15 +694,23 @@ class Collection(object):
             payload_json = {
                 "obj" : pre_state,
                 "new": post_state,
-                "meta": {"sender": sender}
+                "meta": {
+                    "sender": sender,
+                    "req_id": req_id
+                }
             }
-            update_success_collection(PayloadUpdateSuccessCollection(payload_json))
+            update_collection_success(PayloadUpdateCollectionSuccess(payload_json))
         return self
 
 
     def update_acl_cdmi(self, cdmi_acl):
-        """Update ACL in the tree_node table from ACL in the cdmi format (list
-        of ACE dictionary), existing ACL are replaced"""
+        """
+        Update ACL in the tree_node table from ACL in the cdmi format (list
+        of ACE dictionary), existing ACL are replaced
+        
+        :param cdmi_acl: a cdmi string for acl
+        :type cdmi_acl: List[dict]
+        """
         cql_string = acl_cdmi_to_cql(cdmi_acl)
         self.node.update_acl(cql_string)
 
@@ -702,7 +733,7 @@ class Collection(object):
         appear in this list for 'action'_access in this object.
         
         :param user: The user to check
-        :type user: :class:`radon.model.User`
+        :type user: :class:`radon.model.user.User`
         
         :return: True if the user can do the action
         :rtype: bool

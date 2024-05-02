@@ -1,4 +1,4 @@
-# Copyright 2021
+# Radon Copyright 2021, University of Oxford
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,20 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dse.cqlengine import connection
-from dse.cqlengine.management import (
+from cassandra.cqlengine import connection
+from cassandra.cqlengine.management import (
     create_keyspace_network_topology,
     drop_keyspace,
      sync_table,
     create_keyspace_simple,
 )
-from dse.cluster import (
+from cassandra.cluster import (
     ExecutionProfile,
     EXEC_PROFILE_DEFAULT,
     NoHostAvailable
 )
-from dse import InvalidRequest
-from dse.policies import WhiteListRoundRobinPolicy
+from cassandra import (
+    AlreadyExists,
+    InvalidRequest
+)
+from cassandra.policies import WhiteListRoundRobinPolicy
 import time
 
 from radon.model.collection import Collection
@@ -46,14 +49,16 @@ from radon.model.config import (
     Config
 )
 from radon.model.notification import (
-    create_request_group,
-    create_request_user,
+    create_group_request,
+    create_user_request,
     Notification
 )
 from radon.model.payload import (
-    PayloadCreateRequestGroup,
-    PayloadCreateRequestUser
+    PayloadCreateGroupRequest,
+    PayloadCreateUserRequest,
 )
+from radon.model.microservices import Microservices
+
 
 def add_search_field(name, type):
     """
@@ -62,7 +67,7 @@ def add_search_field(name, type):
     :param name: The name of the field
     :type name: str
     :param type: The type of the field 
-    :type name: str
+    :type type: str
     
     :return: True if the field has been added
     :rtype: bool
@@ -92,7 +97,8 @@ def connect():
     See the cfg object in the :mod:`radon.model.config` module, .
     
     :return: A boolean which indicates if the connection is successful
-    :rtype: bool"""
+    :rtype: bool
+    """
     num_retries = 5
     retry_timeout = 2
  
@@ -148,7 +154,9 @@ def create_default_users():
                 "sender": "radon-lib"
             }
         }
-        create_request_group(PayloadCreateRequestGroup(payload_json))
+        Microservices.create_group(PayloadCreateGroupRequest(payload_json))
+        # Do we want to use the listener/web microservices loop for that ?
+        # create_group_request(PayloadCreateGroupRequest(payload_json))
 
     for login, fullname, email, pwd, is_admin, groups in cfg.default_users:
         payload_json = {
@@ -164,14 +172,16 @@ def create_default_users():
                     "sender": "radon-lib"
                 }
             }
-        create_request_user(PayloadCreateRequestUser(payload_json))
+        Microservices.create_user(PayloadCreateUserRequest(payload_json))
+        # Do we want to use the listener/web microservices loop for that ?
+        # create_user_request(PayloadCreateUserRequest(payload_json))
 
 
 def create_root():
     """Create the root container
     
     :return: The root collection object
-    :rtype: :class:`radon.model.Collection`"""
+    :rtype: :class:`radon.model.collection.Collection`"""
     # get_root will create the root if it doesn't exist yet
     return Collection.get_root()
 
@@ -206,7 +216,8 @@ def create_tables():
     # # query = """ALTER SEARCH INDEX SCHEMA ON radon.tree_node ADD types.fieldType[@name='pathTextField', @class='org.apache.solr.schema.TextField']  
     # #            WITH $$ { "analyzer": {"tokenizer": {"class": "solr.StandardTokenizerFactory"},
     # #                      "filter": [ {"class": "solr.LowerCaseFilterFactory"}, {"class": "solr.PorterStemFilterFactory"} ] }} $$;"""
-    #
+    # Not using the stem filter finally
+    # It will create the indexes /, /test, /test/test2, ...
     query = """ALTER SEARCH INDEX SCHEMA ON {0}.tree_node ADD types.fieldType[@name='pathTextField', @class='org.apache.solr.schema.TextField']  
                WITH $$ {{ "analyzer": {{"tokenizer": {{"class": "solr.PathHierarchyTokenizerFactory"}},
                          "filter": [ {{"class": "solr.LowerCaseFilterFactory"}} ] }}}} $$;""".format(cfg.dse_keyspace)
@@ -244,7 +255,20 @@ def create_tables():
         pass
     
     rebuild_index()
-    
+
+    # Create materialized views
+    query = """CREATE MATERIALIZED VIEW notification_by_req_id
+               AS SELECT req_id, date, when, op_name, op_type, obj_type, obj_key
+               FROM notification
+               WHERE req_id IS NOT NULL AND date IS NOT NULL AND when IS NOT NULL AND 
+                     op_name IS NOT NULL AND op_type IS NOT NULL AND 
+                     obj_type IS NOT NULL AND obj_key IS NOT NULL
+               PRIMARY KEY (req_id, op_type, date, when, op_name, obj_type, obj_key);"""
+    try:
+        session.execute(query)
+    except AlreadyExists:   # Materialized view already exists
+        pass
+
 
 def rebuild_index(): 
     """Reload the search index schema and rebuild the search index"""
@@ -255,15 +279,13 @@ def rebuild_index():
     
     query = """REBUILD SEARCH INDEX ON {0}.tree_node;""".format(cfg.dse_keyspace)
     session.execute(query)
-    
+
 
 def rm_search_field(name):
     """
     Add a search field for DSE Search
         
     :param name: The name of the field
-    :type name: str
-    :param type: The type of the field 
     :type name: str
     """ 
     c = Config.objects.filter(module = MODULE_SEARCH,
@@ -273,7 +295,7 @@ def rm_search_field(name):
     cluster = connection.get_cluster()
     session = cluster.connect(cfg.dse_keyspace)
     
-    query = """ALTER SEARCH INDEX SCHEMA ON {0}.tree_node DROP field {1};""".format(
+    query = """ALTER SEARCH INDEX SCHEMA ON {0}.tree_node DROP field "{1}";""".format(
                     cfg.dse_keyspace,
                     name)
     try:

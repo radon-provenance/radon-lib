@@ -12,8 +12,6 @@ python3 -m venv ~/ve/radon-lib
 source ~/ve/radon-lib/bin/activate
 
 
-
-
 # License
 
 Licensed under the Apache License, Version 2.0 (the "License"); 

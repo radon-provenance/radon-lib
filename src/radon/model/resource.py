@@ -1,4 +1,4 @@
-# Copyright 2021
+# Radon Copyright 2021, University of Oxford
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,20 +34,20 @@ from radon.model.errors import (
     ResourceConflictError
 )
 from radon.model.notification import (
-    create_fail_resource,
-    create_success_resource,
-    delete_success_resource,
-    update_success_resource
+    create_resource_fail,
+    create_resource_success,
+    delete_resource_success,
+    update_resource_success
 )
 from radon.model.payload import (
-    PayloadCreateFailResource,
-    PayloadCreateSuccessResource,
-    PayloadDeleteSuccessResource,
-    PayloadUpdateSuccessResource
+    PayloadCreateResourceFail,
+    PayloadCreateResourceSuccess,
+    PayloadDeleteResourceSuccess,
+    PayloadUpdateResourceSuccess
 )
 from radon.util import (
     datetime_serializer,
-#     decode_meta,
+    decode_meta,
     default_cdmi_id,
     encode_meta,
     is_reference,
@@ -55,6 +55,7 @@ from radon.util import (
     meta_cdmi_to_cassandra,
     meta_cassandra_to_cdmi,
     metadata_to_list,
+    new_request_id,
     now,
     split,
 )
@@ -68,7 +69,7 @@ class Resource(ABC):
     object in the Cassandra database.
     
     :param node: The TreeNode row that corresponds to the resource
-    :type node: :class:`radon.model.TreeNode`
+    :type node: :class:`radon.model.tree_node.TreeNode`
     :param url: The url of the resource
     :type url: str
     :param path: The full path of the resource in the hierarchy
@@ -88,7 +89,7 @@ class Resource(ABC):
         Create the resource object based on the TreeNode row from Cassandra
         
         :param node: The TreeNode row that corresponds to the resource
-        :type node: :class:`radon.model.TreeNode`
+        :type node: :class:`radon.model.tree_node.TreeNode`
         """
         self.node = node
         self.url = self.node.object_url
@@ -109,7 +110,8 @@ class Resource(ABC):
  
     @classmethod
     def create(cls, container, name, url=None, metadata=None, sender=None,
-               mimetype=None, size=None, read_access=None, write_access=None):
+               mimetype=None, size=None, read_access=None, write_access=None,
+               req_id=None):
         """
         Create a new resource
         
@@ -127,9 +129,15 @@ class Resource(ABC):
         :type mimetype: str, optional
         :param size: The name of the user who created the resource
         :type size: str, optional
+        :param read_access: A list of groups with a read access
+        :type read_access: list[str]
+        :param write_access: A list of groups with a write access
+        :type write_access: list[str]
+        :param req_id: The id of the request that was made to create a resource
+        :type req_id: str, optional
         
         :return: The new Resource object
-        :rtype: :class:`radon.model.Resource`
+        :rtype: :class:`radon.model.resource.Resource`
         """
         from radon.model.collection import Collection
         if not container.endswith('/'):
@@ -143,21 +151,26 @@ class Resource(ABC):
         
         existing = cls.find(path)
         if existing:
-            create_fail_resource(PayloadCreateFailResource.default(
+            create_resource_fail(PayloadCreateResourceFail.default(
                 path, "Conflict with a resource", sender))
             return None
-            
+        
         # Check if parent collection exists
         parent = Collection.find(container)
         if parent is None:
-            create_fail_resource(PayloadCreateFailResource.default(
+            create_resource_fail(PayloadCreateResourceFail.default(
                 path, "Parent container doesn't exist", sender))
             return None
 
         now_date = now()
+        cdmi_acl = None
         if not metadata:
             user_meta = {}
         else:
+            if "cdmi_acl" in metadata:
+                # We treat acl metadata in a specific way
+                cdmi_acl = metadata["cdmi_acl"]
+                del metadata["cdmi_acl"]
             user_meta = {}
             for k in metadata:
                 user_meta[k] = encode_meta(metadata[k])
@@ -192,6 +205,8 @@ class Resource(ABC):
         
         if read_access or write_access:
             new.create_acl_list(read_access, write_access)
+        if cdmi_acl:
+            new.update_acl_cdmi(cdmi_acl)
 
         payload_json = {
             "obj": new.mqtt_get_state(),
@@ -199,7 +214,10 @@ class Resource(ABC):
                 "sender": sender
             }
         }
-        create_success_resource(PayloadCreateSuccessResource(payload_json))
+        if req_id:
+            payload_json['meta']['req_id'] = req_id
+
+        create_resource_success(PayloadCreateResourceSuccess(payload_json))
 
         return new
 
@@ -222,6 +240,8 @@ class Resource(ABC):
         
         :param sender: The name of the user who deleted the collection
         :type sender: str, optional
+        :param req_id: The id of the request that was made to create a collection
+        :type req_id: str, optional
         """
         if "sender" in kwargs:
             sender = kwargs['sender']
@@ -229,14 +249,23 @@ class Resource(ABC):
         else:
             sender = cfg.sys_lib_user
 
+        if "req_id" in kwargs:
+            req_id = kwargs['req_id']
+            del kwargs['req_id']
+        else:
+            req_id = new_request_id()
+
         payload_json = {
             "obj": {"path": self.path},
-            'meta' : {"sender": sender}
+            'meta' : {
+                "sender": sender,
+                "req_id": req_id
+            }
         }
 
         self.node.delete()
 
-        delete_success_resource(PayloadDeleteSuccessResource(payload_json))
+        delete_resource_success(PayloadDeleteResourceSuccess(payload_json))
 
 
     @classmethod
@@ -251,7 +280,7 @@ class Resource(ABC):
         :type version: int, optional
         
         :return: The Resource object which maps the TreeNode
-        :rtype: :class:`radon.model.Resource`
+        :rtype: :class:`radon.model.resource.Resource`
         """
         if path == '/':
             return None
@@ -312,7 +341,7 @@ class Resource(ABC):
         :return: The ACL associated to the resource
         :rtype: dict
         """
-        return self.node.acl
+        return self.node.get_acl()
 
 
     def get_acl_list(self):
@@ -345,7 +374,12 @@ class Resource(ABC):
 
 
     def get_acl_metadata(self):
-        """Return a dictionary of acl based on the Resource schema"""
+        """
+        Return a dictionary of acl based on the Resource schema
+
+        :return: The acl stored in a dict
+        :rtype: dict
+        """
         return serialize_acl_metadata(self)
 
 
@@ -354,20 +388,20 @@ class Resource(ABC):
         Get available actions for a user according to the groups it belongs
         
         :param user: The user we want to check
-        :type user: :class:`radon.model.User`
+        :type user: :class:`radon.model.user.User`
         
         :return: the set of actions the user can do
         :rtype: Set[str]
         """
         # Check permission on the parent container if there's no action
         # defined at this level
-        acl = self.get_acl_dict()
-        if not acl:
+        if not self.get_acl_dict():
             from radon.model.collection import Collection
             parent_container = Collection.find(self.container)
             return parent_container.get_authorized_actions(user)
         actions = set([])
-        for gid in user.groups + ["AUTHENTICATED@"]:
+        acl = self.node.get_acl()
+        for gid in user.get_groups() + [cfg.auth_group]:
             if gid in acl:
                 ace = acl[gid]
                 level = acemask_to_str(ace.acemask, True)
@@ -439,6 +473,19 @@ class Resource(ABC):
         return metadata_to_list(self.node.user_meta)
 
 
+    def get_user_meta_key(self, key):
+        """
+        Return the value of a metadata
+        
+        :param key: The name of the metadata we are looking for
+        :type key: str
+        
+        :return: the value of the metadata, decoded from JSON
+        :rtype: object
+        """
+        return decode_meta(self.node.user_meta.get(key, ""))
+
+
     def get_modify_ts(self):
         """
         Get the modification timestamp
@@ -478,12 +525,20 @@ class Resource(ABC):
         """
         Return the name of a resource. If the resource is a reference we
         append a trailing '?' on the resource name
+        
+        :return: The name of the resource
+        :rtype: str
         """
         pass
 
 
     def get_path(self):
-        """Return the full path of the resource"""
+        """
+        Return the full path of the resource
+        
+        :return: The path of the resource
+        :rtype: str
+        """
         return self.path
 
 
@@ -527,48 +582,21 @@ class Resource(ABC):
         payload["url"] = self.url
         payload["container"] = self.container
         payload["name"] = self.get_name()
+        payload["path"] = self.path
         payload["create_ts"] = self.get_create_ts()
         payload["modify_ts"] = self.get_modify_ts()
         payload["metadata"] = self.get_cdmi_user_meta()
         return payload
 
 
-    def mqtt_payload(self, pre_state, post_state):
-        """
-        Get a string version of the payload of the message, with the pre and
-        post states. The pre and post states are stored in a dictionary and
-        dumped in a JSON string.
-        
-        :param pre_state: The dictionary which describes the state of the 
-          resource before a modification
-        :type pre_state: dict
-        :param post_state: The dictionary which describes the state of the 
-          resource after a modification
-        :type post_state: dict
-        
-        :return: The payload as a JSON string
-        :rtype: str
-        """
-        payload = dict()
-        payload["pre"] = pre_state
-        payload["post"] = post_state
-        return json.dumps(payload, default=datetime_serializer)
-# 
-    
     @abstractmethod
     def put(self, data):
         """
         Store some data in a Resource stored in Cassandra
         """
         pass
-# 
-# 
-#     def reset(self):
-#         from radon.models import SearchIndex
-# 
-#         SearchIndex.reset(self.path)
-# 
-# 
+
+
 #     def set_checksum(self, checksum):
 #         """Set the checksum for the data object. For a reference the checksum 
 #         is not stored in Cassandra. We may change the model and store is in
@@ -605,9 +633,14 @@ class Resource(ABC):
             data["can_write"] = self.user_can(user, "write")
             data["can_edit"] = self.user_can(user, "edit")
             data["can_delete"] = self.user_can(user, "delete")
+        else:
+            data["can_read"] = False
+            data["can_write"] = False
+            data["can_edit"] = False
+            data["can_delete"] = False
         return data
- 
- 
+
+
     def to_dict(self, user=None):
         """
         Return a dictionary which describes a resource for the web ui
@@ -629,16 +662,34 @@ class Resource(ABC):
         :type metadata: dict
         :param mimetype: The mimetype of the resource
         :type mimetype: str, optional
+        :param read_access: A list of groups with a read access
+        :type read_access: list[str]
+        :param write_access: A list of groups with a write access
+        :type write_access: list[str]
+        :param req_id: The id of the request that was made to create a collection
+        :type req_id: str, optional
+        
+        :return: The updated resource
+        :rtype: :class:`radon.model.resource.Resource`
         """
- 
         pre_state = self.mqtt_get_state()
         now_date = now()
         
         # Metadata given in cdmi format are transformed to be stored in Cassandra
-        if 'metadata' in kwargs:
-            kwargs['user_meta'] = kwargs['metadata']
+        if "metadata" in kwargs:
+            metadata = kwargs["metadata"]
+            if "cdmi_acl" in metadata:
+                # We treat acl metadata in a specific way
+                cdmi_acl = metadata["cdmi_acl"]
+                del metadata["cdmi_acl"]
+                self.update_acl_cdmi(cdmi_acl)
+            # Transform the metadata in cdmi format to the format stored in
+            # Cassandra
+            self.node.user_meta = {}
+            self.node.save()
+            kwargs["user_meta"] = metadata
             del kwargs["metadata"]
-         
+
         if "user_meta" in kwargs:
             kwargs["user_meta"] = meta_cdmi_to_cassandra(kwargs["user_meta"])
         
@@ -648,7 +699,6 @@ class Resource(ABC):
         if "mimetype" in kwargs:
             sys_meta[cfg.meta_mimetype] = kwargs["mimetype"]
             del kwargs["mimetype"]
-            
 
         if "sender" in kwargs:
             sender = kwargs["sender"]
@@ -671,7 +721,13 @@ class Resource(ABC):
             kwargs["object_url"] = kwargs["url"]
             del kwargs["url"]
             self.url = kwargs["object_url"]
- 
+
+        if "req_id" in kwargs:
+            req_id = kwargs['req_id']
+            del kwargs['req_id']
+        else:
+            req_id = new_request_id()
+
         self.node.update(**kwargs)
         
         if read_access or write_access:
@@ -684,15 +740,23 @@ class Resource(ABC):
             payload_json = {
                 "obj" : pre_state,
                 "new": post_state,
-                "meta": {"sender": sender}
+                "meta": {
+                    "sender": sender,
+                    "req_id": req_id
+                }
             }
-            update_success_resource(PayloadUpdateSuccessResource(payload_json))
+            update_resource_success(PayloadUpdateResourceSuccess(payload_json))
         return self
 
 
     def update_acl_cdmi(self, cdmi_acl):
-        """Update ACL in the tree_node table from ACL in the cdmi format (list
-        of ACE dictionary), existing ACL are replaced"""
+        """
+        Update ACL in the tree_node table from ACL in the cdmi format (list
+        of ACE dictionary), existing ACL are replaced
+        
+        :param cdmi_acl: a cdmi string for acl
+        :type cdmi_acl: List[dict]
+        """
         cql_string = acl_cdmi_to_cql(cdmi_acl)
         self.node.update_acl(cql_string)
 
@@ -715,7 +779,7 @@ class Resource(ABC):
         appear in this list for 'action'_access in this object.
         
         :param user: The user to check
-        :type user: :class:`radon.model.User`
+        :type user: :class:`radon.model.user.User`
         
         :return: True if the user can do the action
         :rtype: bool
@@ -779,7 +843,7 @@ class RadonResource(Resource):
     :param obj_id: The uuid of the DataObject
     :type obj_id: str
     :param obj: The DataObject object
-    :type obj: :class:`radon.model.DataObject`
+    :type obj: :class:`radon.model.data_object.DataObject`
     """
 
     def __init__(self, node):
@@ -787,7 +851,7 @@ class RadonResource(Resource):
         Create the resource object based on the TreeNode row from Cassandra
         
         :param node: The TreeNode row that corresponds to the resource
-        :type node: :class:`radon.model.TreeNode`
+        :type node: :class:`radon.model.tree_node.TreeNode`
         """
         Resource.__init__(self, node)
         self.obj_id = self.url.replace(cfg.protocol_cassandra, "")
@@ -868,6 +932,12 @@ class RadonResource(Resource):
     def put(self, fh):
         """
         Store some binary data in a Resource stored in Cassandra
+        
+        :param fh: A file handler we can read
+        :type fh: file
+        
+        :return: The new Data object
+        :rtype: :class:`radon.model.data_object.DataObject`
         """
         if not (hasattr(fh, 'read')):
             data = fh

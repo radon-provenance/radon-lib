@@ -1,35 +1,38 @@
-"""Copyright 2021
+# Radon Copyright 2021, University of Oxford
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+# http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
 
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-"""
-
-
-import dse.cluster
-from dse.cqlengine import connection
-from dse.cqlengine.connection import get_cluster
-from dse.cqlengine.management import (
+import cassandra.cluster
+from cassandra.cqlengine import connection
+from cassandra.cqlengine.connection import get_cluster
+from cassandra.cqlengine.management import (
     create_keyspace_simple,
     drop_keyspace
 )
+import uuid
 
 from radon.model.config import cfg
 from radon.database import (
+    add_search_field,
     connect,
+    create_default_fields,
     create_default_users,
     destroy,
     initialise,
     create_root,
-    create_tables
+    create_tables,
+    rm_search_field
 )
 
 TEST_KEYSPACE = "test_keyspace"
@@ -75,8 +78,8 @@ def test_fail_initialise(mocker):
 
 def test_fail_connection_setup(mocker):
     # Raise a fake exception to test all parts of the connection code
-    mocker.patch('dse.cqlengine.connection.setup', 
-                 side_effect=dse.cluster.NoHostAvailable(
+    mocker.patch('cassandra.cqlengine.connection.setup', 
+                 side_effect=cassandra.cluster.NoHostAvailable(
                      "My Fake Error", 
                      { "127.0.0.1": Exception() }))
     # Deactivate the sleep method to sped up tests
@@ -118,7 +121,35 @@ def test_tables():
     cluster = connection.get_cluster()
     created_tables = set(cluster.metadata.keyspaces[TEST_KEYSPACE].tables.keys())
     assert created_tables.difference(ls_tables)==set()
+    
+    # Already existing tables
+    create_tables()
     destroy()
 
 
+def test_search_field():
+    cfg.dse_keyspace = TEST_KEYSPACE
+    initialise()
+    create_tables()
+    create_default_users()
+    create_root()
+    
+    # Add a new field
+    field_name = uuid.uuid4().hex
+    add_search_field(field_name, "StrField")
+    
+    # Add a field with a wrong field type
+    add_search_field(uuid.uuid4().hex, "WrongField")
+    
+    # create default fields (from Config)
+    create_default_fields()
+    
+    # Remove an existing field
+    rm_search_field(field_name)
+    
+    # Remove a non existing field
+    rm_search_field(uuid.uuid4().hex)
+
+    destroy()
+    
 

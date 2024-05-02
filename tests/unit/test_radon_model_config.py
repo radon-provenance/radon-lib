@@ -1,17 +1,16 @@
-"""Copyright 2021
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-"""
+# Radon Copyright 2021, University of Oxford
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+# http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 
 import os
@@ -19,6 +18,7 @@ import pytest
 
 from radon.model.config import (
     cfg,
+    Config,
     LocalConfig,
     DEFAULT_DSE_HOST,
     DEFAULT_DSE_KEYSPACE,
@@ -28,7 +28,17 @@ from radon.model.config import (
     ENV_DSE_HOST_VAR,
     ENV_MQTT_HOST_VAR
 )
+from radon.database import (
+    connect,
+    create_default_fields,
+    destroy,
+    initialise,
+    create_root,
+    create_tables
+)
 
+
+TEST_KEYSPACE = "test_keyspace"
 
 def test_config():
     # Test DSE HOST VAR
@@ -58,6 +68,15 @@ def test_config():
     assert cfg.dse_strategy == DEFAULT_DSE_STRATEGY
     assert cfg.dse_repl_factor == DEFAULT_DSE_REPL_FACTOR
 
+def test_indexes():
+    cfg.dse_keyspace = TEST_KEYSPACE
+    initialise()
+    create_tables()
+    create_default_fields()
+    
+    ls = Config.get_search_indexes()
+    print(ls)
+    destroy()
 
 def test_to_dict():
     cfg_dict = cfg.to_dict()

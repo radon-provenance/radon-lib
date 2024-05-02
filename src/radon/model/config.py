@@ -1,4 +1,4 @@
-# Copyright 2021
+# Radon Copyright 2021, University of Oxford
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,9 +17,9 @@ import os
 
 from dotenv import load_dotenv
 
-from dse.cqlengine import columns
-from dse.cqlengine.models import connection, Model
-from dse.query import SimpleStatement
+from cassandra.cqlengine import columns
+from cassandra.cqlengine.models import connection, Model
+from cassandra.query import SimpleStatement
 
 from radon.log import init_logger
 
@@ -82,9 +82,9 @@ MODULE_META = "meta_module"
 
 OPTION_FIELD_META = "field_meta"
 
-FIELD_TYPE_TEXT = "TextLine"
-FIELD_TYPE_STR = "StrField"
-FIELD_TYPE_INT = "TrieIntField"
+FIELD_TYPE_TEXT = "TextLine"    # defined in database.create_tables: tokenize+lower case
+FIELD_TYPE_STR = "StrField"     # Small string fields, not tokenized or analized
+FIELD_TYPE_INT = "TrieIntField" # Integer field
 
 FIELD_TYPE_INTERFACE = [
     (FIELD_TYPE_TEXT, FIELD_TYPE_TEXT),
@@ -110,6 +110,9 @@ DEFAULT_FIELDS = [
     ("dc_title", FIELD_TYPE_TEXT),   
     ("dc_type", FIELD_TYPE_TEXT),
 ]
+
+AUTH_GROUP = "AUTHENTICATED@"
+ANON_GROUP = "ANONYMOUS@"
 
 
 class LocalConfig(object):
@@ -225,6 +228,9 @@ class LocalConfig(object):
         self.auth_ldap_user_dn_template = AUTH_LDAP_USER_DN_TEMPLATE
         
         self.logger = init_logger("radon-lib", self)
+        
+        self.auth_group = AUTH_GROUP
+        self.anon_group = ANON_GROUP
 
 
     def to_dict(self):
@@ -265,14 +271,15 @@ class Config(Model):
     
     Example:
     
-    |--------|----------|----------|----------|
+    
     | module |  option  |   key    |   value  |
-    |--------|----------|----------|----------|
+   
     | search |   field  |  desc    | TextLine |
     | search |   field  |  author  | TextLine |
     |   dse  | keyspace | keyspace |  radon   |
     | ...                                     |
-    |--------|----------|----------|----------|
+    
+    
     
     :param module: The name of the radon module that has to be configured
     :type module: :class:`columns.Text`

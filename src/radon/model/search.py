@@ -1,4 +1,4 @@
-# Copyright 2022
+# Radon Copyright 2022, University of Oxford
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,8 +13,8 @@
 # limitations under the License.
 
 
-from dse.cqlengine import connection
-from dse import InvalidRequest
+from cassandra.cqlengine import connection
+from cassandra import InvalidRequest
 
 from radon.model.config import cfg
 from radon.model.collection import Collection
@@ -27,9 +27,17 @@ class Search(object):
 
 
     @classmethod
-    def search(cls, solr_query, user):
+    def search(cls, solr_query, user=None):
         """
-        search
+        Search an object in the database
+        
+        :param solr_query: The solr query that will be sent
+        :type solr_query: str
+        :param user: A user to check ACL
+        :type user: :class:`radon.model.user.User`
+        
+        :return: A list of rows which match the query
+        :rtype: list of dict
         """
         query = """SELECT * FROM tree_node where {}""".format(solr_query)
         

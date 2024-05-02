@@ -52,6 +52,14 @@ radon.model.group module
    :undoc-members:
    :show-inheritance:
 
+radon.model.microservices module
+--------------------------------
+
+.. automodule:: radon.model.microservices
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 radon.model.notification module
 -------------------------------
 
@@ -60,10 +68,26 @@ radon.model.notification module
    :undoc-members:
    :show-inheritance:
 
+radon.model.payload module
+--------------------------
+
+.. automodule:: radon.model.payload
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 radon.model.resource module
 ---------------------------
 
 .. automodule:: radon.model.resource
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+radon.model.search module
+-------------------------
+
+.. automodule:: radon.model.search
    :members:
    :undoc-members:
    :show-inheritance:

@@ -1,4 +1,4 @@
-# Copyright 2021
+# Radon Copyright 2021, University of Oxford
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,94 +14,81 @@
 
 
 import pytest
-from faker import Faker
 import uuid
-import hashlib
-import json
-import io
+import time
 
 from radon.model.config import cfg
 from radon.database import (
     connect,
-    create_default_users,
     create_root,
+    create_default_fields,
+    create_default_users,
     create_tables,
     destroy,
     initialise,
 )
 from radon.model.collection import Collection
-from radon.model.data_object import DataObject
-from radon.model.group import Group
 from radon.model.resource import Resource
-from radon.model.tree_node import TreeNode
+from radon.model.search import Search
 from radon.model.user import User
-from radon.model.resource import NoUrlResource
-from radon.model.errors import(
-    CollectionConflictError,
-    NoSuchCollectionError,
-    ResourceConflictError,
-)
 
 
 TEST_KEYSPACE = "test_keyspace"
 
-GRP1_NAME = uuid.uuid4().hex
-GRP2_NAME = uuid.uuid4().hex
-GRP3_NAME = uuid.uuid4().hex
-
-USR1_NAME = uuid.uuid4().hex
-USR2_NAME = uuid.uuid4().hex
 
 def setup_module():
     cfg.dse_keyspace = TEST_KEYSPACE
     initialise()
     connect()
     create_tables()
-    create_default_users()
     create_root()
-
-    grp1 = Group.create(name=GRP1_NAME)
-    grp2 = Group.create(name=GRP2_NAME)
-    grp3 = Group.create(name=GRP3_NAME)
+    create_default_users()
+    create_default_fields()
     
-    user_name = USR1_NAME
-    email = uuid.uuid4().hex
-    password = uuid.uuid4().hex
-    administrator = True
-    groups = [GRP1_NAME]
-    user1 = User.create(name=user_name,
-                        email=email,
-                        password=password, 
-                        administrator=administrator,
-                        groups=groups)
+    Collection.create("/", "test")
+    resc = Resource.create("/test", "resc.txt")
+    if not resc:
+        resc = Resource.find("/test/resc.txt")
+    resc.update(metadata={"dc_description" : "A metadata to search"})
+    # We need to wait a bit ti be sure that indexes has been computed
+    time.sleep(1)
     
-    user_name = USR2_NAME
-    email = uuid.uuid4().hex
-    password = uuid.uuid4().hex
-    administrator = False
-    groups = [GRP1_NAME, GRP2_NAME]
-    user2 = User.create(name=user_name,
-                        email=email,
-                        password=password, 
-                        administrator=administrator,
-                        groups=groups)
-
 
 
 def teardown_module(module):
     destroy()
 
 
-def create_data_object():
-    myFactory = Faker()
-    content = myFactory.text()
-    do = DataObject.create(content.encode())
-    return do
+def test_search():
+    user = User.find("admin")
+    
+    solr_query = """solr_query='path:unknown'"""
+    results = Search.search(solr_query, user)
+    assert len(results) == 0
+    
+    solr_query = """solr_query='path:test'"""
+    results = Search.search(solr_query, user)
+    assert len(results) == 1
+    
+    solr_query = """solr_query='path:resc.txt'"""
+    results = Search.search(solr_query, user)
+    assert len(results) == 1
+    
+    solr_query = """solr_query='path:*test*'"""
+    results = Search.search(solr_query, user)
+    assert len(results) == 2
+    
+    solr_query = """solr_query='dc_description:metadata'"""
+    results = Search.search(solr_query, user)
+    assert len(results) == 1
+    
+    solr_query = """solr_query='dc_description:strawberry'"""
+    results = Search.search(solr_query, user)
+    assert len(results) == 0
 
-
-
-def test_put():
-    pass
-
+    solr_query = """wrong_solr_query='dc_description:strawberry'"""
+    results = Search.search(solr_query, user)
+    assert results == []
+    
 
 
