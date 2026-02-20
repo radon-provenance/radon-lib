@@ -1,0 +1,28 @@
+name: Semantic Release Lib
+on:
+  push:
+    branches:
+        - main
+        - develop
+  workflow_dispatch:
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.MY_RELEASE_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.MY_RELEASE_TOKEN }}
+        run: |
+          npx semantic-release
