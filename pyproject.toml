@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name="radon-lib"
+dynamic=["version"]
+requires-python = ">= 3.8"
+dependencies = [
+  "blessings==1.7",
+  "crcmod==1.7",
+  "docopt==0.6.2",
+  "cassandra-driver==3.29.1",
+  "passlib==1.7.4",
+  "paho-mqtt==1.6.1",
+  "python-dotenv==0.19.1",
+  "python-ldap==3.4.3",
+  "pytest==6.2.5",
+  "pytest-cov==3.0.0",
+  "pytest-mock==3.8.2",
+  "faker==9.5.2",
+  "cli-test-helpers==1.0.1",
+  "jsonschema==4.20.0"
+]
+author=[
+  {"name" = "Jerome Fuselier"}
+]
+maintainers=[
+  {"name" = "Jerome Fuselier"}
+]
+description="Radon core library"
+readme="README.md"
+license = {file = "LICENSE"}
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Environment :: Console",
+  "Operating System :: POSIX :: Linux",
+  "Topic :: Database :: Database Engines/Servers",
+  "Topic :: Scientific/Engineering",
+  "Topic :: System :: Archiving"
+]
+
+
+
+[project.scripts]
+radmin="radon.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/radon-provenance/radon-lib"
+Documentation = "https://radon-provenance.github.io/"
+Repository = "https://github.com/radon-provenance/radon-lib"
+
+[tool.hatch.version]
+path = "src/radon/__init__.py"
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/radon"]

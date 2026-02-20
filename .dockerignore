@@ -1,0 +1,28 @@
+dist
+*.egg-info
+**/*.egg-info
+**/__pycache__
+tests
+.pytest_cache
+*.pyc
+*.pyo
+*.pyd
+.coverage
+.coveragerc
+.env
+docs
+
+# Git
+.git
+.gitignore
+
+# Sonarqube
+.scannerwork
+sonar-project.properties
+sonar_scan.sh
+
+# Eclipse
+.settings
+.project
+.pydevproject
+
