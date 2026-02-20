@@ -13,6 +13,10 @@
 # limitations under the License.
 
 
+<<<<<<< Updated upstream
 __version__ = "1.0.0-dev.1"
+=======
+__version__ = "1.2.0"
+>>>>>>> Stashed changes
 
 

@@ -19,7 +19,11 @@ from cassandra.query import SimpleStatement
 import json
 import time
 import logging
-import paho.mqtt.publish as publish
+
+from paho.mqtt import (
+    client,
+    publish
+)
  
 from radon.model.config import cfg
 from radon.util import (
@@ -39,6 +43,7 @@ from radon.model.payload import (
     PayloadCreateGroupRequest,
     PayloadCreateGroupSuccess,
     PayloadCreateGroupFail,
+    PayloadCreateResourceInit,
     PayloadCreateResourceRequest,
     PayloadCreateResourceSuccess,
     PayloadCreateResourceFail,
@@ -130,6 +135,8 @@ class Notification(Model):
     :type payload: :class:`columns.Text`
     
     """
+    
+    __db_table_name__ = "notification"
 
     date = columns.Text(default=default_date, partition_key=True)
     when = columns.TimeUUID(
@@ -446,6 +453,31 @@ def create_resource_fail(payload):
     else:
         (is_valid, msg) = payload.validate()
         if not is_valid:# Create valid payload
+            payload = PayloadCreateResourceFail.default(
+                payload.get_object_key(),
+                msg,
+                payload.get_sender())
+    return Notification.create_notification(payload)
+
+
+def create_resource_init(payload):
+    """
+    Create a new notification when the creation of the resource starts
+    
+    :param payload: The information regarding the resource whose creation has
+                    been requested
+    :type payload: :class:`radon.model.payload.PayloadCreateResourceInit`  
+    
+    :return: The notification row created in the database
+    :rtype: :class:`radon.model.notification.Notification`
+    """
+    if not isinstance(payload, PayloadCreateResourceInit):
+        payload = PayloadCreateResourceFail.default(
+            MSG_UNDEFINED_PATH,
+            MSG_PAYLOAD_ERROR)
+    else:
+        (is_valid, msg) = payload.validate()
+        if not is_valid: # Create valid payload
             payload = PayloadCreateResourceFail.default(
                 payload.get_object_key(),
                 msg,
@@ -1230,4 +1262,20 @@ def wait_response(req_id):
     return res
 
 
+def test_mqtt_connection():
+    """
+    Test the connection to the MQTT broker
+    
+    
+    :return: The result of the operation (True or False)
+    :rtype: bool
+    """
+    client_mqtt = client.Client()
+    
+    try:
+        val = client_mqtt.connect(cfg.mqtt_host)
+        client_mqtt.disconnect()
+        return val == 0
+    except Exception:
+        return False
 

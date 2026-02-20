@@ -29,6 +29,7 @@ OP_CREATE = "create"
 OP_DELETE = "delete"
 OP_UPDATE = "update"
 OPT_REQUEST = "request"
+OPT_INIT = "init"
 OPT_SUCCESS = "success"
 OPT_FAIL = "fail"
 OBJ_RESOURCE = "resource"      # path
@@ -380,6 +381,11 @@ class PayloadCreateRequest(PayloadCreate):
 
     def __init__(self, obj_type, json):
         super().__init__(OPT_REQUEST, obj_type, json)
+        
+class PayloadCreateInit(PayloadCreate):
+
+    def __init__(self, obj_type, json):
+        super().__init__(OPT_INIT, obj_type, json)
 
 class PayloadCreateSuccess(PayloadCreate):
 
@@ -444,6 +450,12 @@ class PayloadCreateGroupRequest(PayloadCreateRequest):
     def __init__(self, json):
         super().__init__(OBJ_GROUP, json)
         self.schema = s_group
+
+class PayloadCreateResourceInit(PayloadCreateInit):
+
+    def __init__(self, json):
+        super().__init__(OBJ_RESOURCE, json)
+        self.schema = s_resc
 
 class PayloadCreateResourceRequest(PayloadCreateRequest):
 

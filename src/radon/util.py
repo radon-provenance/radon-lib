@@ -32,7 +32,6 @@ import struct
 import uuid
 import ldap
 
-from radon.model.config import cfg
 
 
 IDENT_PEN = 42223
@@ -308,6 +307,7 @@ def is_reference(url):
     :rtype: bool
     """
     if url:
+        from radon.model.config import cfg
         return not url.startswith(cfg.protocol_cassandra)
     else:
         return False
@@ -343,6 +343,30 @@ def last_x_days(days=50):
     return [d.strftime("%Y%m%d") for d in dates]
 
 
+def list_to_csv(ls):
+    """Transform a list of strings to a comma separated string
+    
+    :param ls: List of strings
+    :type ls: list(str)
+    
+    :return: a comma separated list of string
+    :rtype: str
+    """
+    return ",".join(ls)
+
+
+def csv_to_list(str_ls):
+    """Transform a list stored in a comma separated string to a real Python list
+    
+    :param str_ls: A comma separated list in a string
+    :type str_ls: str
+    
+    :return: a comma separated list of string
+    :rtype: str
+    """
+    return list(filter(None, [item.strip() for item in str_ls.split(',') if item]))
+
+
 def mk_cassandra_url(obj_uuid):
     """Create a URL for an object stored in Cassandra, using its UUID
     
@@ -352,6 +376,8 @@ def mk_cassandra_url(obj_uuid):
     :return: The URL
     :rtype: str
     """
+    
+    from radon.model.config import cfg
     return cfg.protocol_cassandra + obj_uuid 
  
  
@@ -436,6 +462,8 @@ def metadata_to_list(metadata, vocab_dict=None):
     :return: a list of pairs (name, value)
     :rtype: list
     """
+    
+    from radon.model.config import cfg
     res = []
     for k, v in metadata.items():
         if vocab_dict:
@@ -600,6 +628,8 @@ def verify_ldap_password(username, password):
              ldap server
     :rtype: bool
     """
+    
+    from radon.model.config import cfg
     server_uri = cfg.auth_ldap_server_uri
     dn_template = cfg.auth_ldap_user_dn_template
     
