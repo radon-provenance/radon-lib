@@ -1,0 +1,19 @@
+branches:
+  - "main"
+
+plugins:
+  - "@semantic-release/commit-analyzer",
+  - "@semantic-release/release-notes-generator",
+  
+  # Plugin for modifying the version in the __init__.py file before committing and creating a release
+  - - "@semantic-release/exec",
+    - "prepareCmd": "sed -i 's/__version__ = \".*\"/__version__ = \"${nextRelease.version}\"/' src/radon/__init__.py"
+      
+  # Plugin for committing the new version
+  - - "@semantic-release/git",
+    - "assets": 
+        - "src/radon/__init__.py",
+      "message": "chore(release): ${nextRelease.version} [skip ci]"
+    
+  # Plugin for creating a GitHub release
+  - - "@semantic-release/github"
