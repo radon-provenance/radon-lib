@@ -14,7 +14,7 @@ dependencies = [
   "passlib==1.7.4",
   "paho-mqtt==1.6.1",
   "python-dotenv==0.19.1",
-  "python-ldap==3.4.3",
+  "python-ldap==3.4.5",
   "pytest==6.2.5",
   "pytest-cov==3.0.0",
   "pytest-mock==3.8.2",
