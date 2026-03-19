@@ -32,7 +32,7 @@ import struct
 import uuid
 import ldap
 
-
+TEST_RELEASE = True
 
 IDENT_PEN = 42223
 # CDMI ObjectId Length: 8 bits header + 16bits uuid
