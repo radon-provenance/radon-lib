@@ -28,7 +28,3 @@ See the License for the specific language governing permissions and limitations 
 
 Parts of this work were supported by the Software Sustainability Institute with 
 funding from EPSRC, BBSRC, ESRC, NERC, AHRC, STFC and MRC through grant EP/S021779/1.
-
-
-# Test Release feat!
-# Add another test line
