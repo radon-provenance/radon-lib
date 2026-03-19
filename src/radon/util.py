@@ -32,6 +32,7 @@ import struct
 import uuid
 import ldap
 
+# Force release
 TEST_RELEASE = True
 
 IDENT_PEN = 42223
