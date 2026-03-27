@@ -4,6 +4,15 @@ branches:
 
 plugins:
   - "@semantic-release/commit-analyzer"
+    - preset: "angular" # Le moteur de base
+      releaseRules:
+        - breaking: true
+          release: "major"
+        - type: "feat"
+          release: "minor"
+        - type: "fix"
+          release: "patch"
+
   - "@semantic-release/release-notes-generator"
   
   # Plugin for modifying the version in the __init__.py file before committing and creating a release
