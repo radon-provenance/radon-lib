@@ -3,7 +3,7 @@ branches:
   - main
 
 plugins:
-  - "@semantic-release/commit-analyzer"
+  - - "@semantic-release/commit-analyzer"
     - preset: "angular" # Le moteur de base
       releaseRules:
         - breaking: true
