@@ -1,32 +1,27 @@
-name: Semantic Release Lib
+name: Release
 on:
   push:
     branches:
-        - main
-        - develop
-  workflow_dispatch:
+      - main
+
 jobs:
   release:
+    name: Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.MY_RELEASE_TOKEN }}
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
-
       - name: Install semantic-release plugins
-        run: |
-          npm install @semantic-release/exec @semantic-release/git
-
+        run: npm install @semantic-release/exec @semantic-release/git
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.MY_RELEASE_TOKEN }}
-        run: |
-          npx semantic-release
+        run: npx semantic-release
