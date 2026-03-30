@@ -21,7 +21,18 @@ jobs:
           node-version: 'lts/*'
       - name: Install semantic-release plugins
         run: npm install @semantic-release/exec @semantic-release/git
-      - name: Release
+      - name: Run Semantic Release
+        id: semantic
+        uses: cycjimmy/semantic-release-action@v4
+        with:
+          # On force l'utilisation du fichier JS ici
+          semantic_version: 21 # Optionnel mais recommandé de fixer la version majeure
+          extra_plugins: |
+            @semantic-release/commit-analyzer
+            @semantic-release/release-notes-generator
+            @semantic-release/exec
+            @semantic-release/git
+            @semantic-release/github
         env:
           GITHUB_TOKEN: ${{ secrets.MY_RELEASE_TOKEN }}
-        run: npx semantic-release
+          SEMANTIC_RELEASE_CONFIG: .releaserc.js  
