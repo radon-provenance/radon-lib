@@ -16,20 +16,31 @@ jobs:
       issues: write
       pull-requests: write
       id-token: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.MY_RELEASE_TOKEN }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "lts/*"
-      - name: Install dependencies
-        run: npm clean-install
-      - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
-        run: npm audit signatures
-      - name: Release
+      
+      - name: Install Semantic Release
+        # On utilise install (pas ci) pour ne pas dépendre d'un lockfile
+        run: |
+          npm install semantic-release \
+          @semantic-release/commit-analyzer \
+          @semantic-release/release-notes-generator \
+          @semantic-release/exec \
+          @semantic-release/git \
+          @semantic-release/github
+
+      - name: Run Semantic Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.MY_RELEASE_TOKEN }}
         run: npx semantic-release
+    
