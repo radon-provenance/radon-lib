@@ -2,7 +2,7 @@
   "branches": ["main"],
   "plugins": [
     ["@semantic-release/commit-analyzer", {
-      "preset": "conventionalcommits",
+      "preset": "angular",
       "releaseRules": [
           { "breaking": true, "release": "major" },
           { "type": "ci", "release": "patch" },
@@ -15,7 +15,7 @@
     [
       "@semantic-release/release-notes-generator",
       {
-        "preset": "conventionalcommits",
+        "preset": "angular",
         "presetConfig": {
           "types": [
             { "type": "ci", "section": "CI/CD", "hidden": false },
