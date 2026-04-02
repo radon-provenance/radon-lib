@@ -30,9 +30,9 @@ jobs:
           node-version: "lts/*"
       
       - name: Install Semantic Release
-        # On utilise install (pas ci) pour ne pas dépendre d'un lockfile
         run: |
-          npm install semantic-release \
+          npm install --no-package-lock \
+          semantic-release \
           @semantic-release/commit-analyzer \
           @semantic-release/release-notes-generator \
           @semantic-release/exec \
