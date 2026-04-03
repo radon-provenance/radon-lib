@@ -24,8 +24,7 @@ jobs:
         with:
           node-version: 'lts/*'
 
-      - name: Install Semantic Release
-        # On utilise --no-package-lock pour ignorer l'erreur npm ci
+      - name: Install Dependencies
         run: |
           npm install --no-package-lock \
           semantic-release \
@@ -35,28 +34,35 @@ jobs:
           @semantic-release/git \
           @semantic-release/github
 
-      - name: Run Semantic Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.MY_RELEASE_TOKEN }}
+      - name: Create Release Config
+        # On crée le fichier .releaserc.js à la volée
         run: |
-          npx semantic-release \
-            --branches main \
-            --plugins '[
+          cat <<EOF > .releaserc.js
+          module.exports = {
+            branches: ["main"],
+            plugins: [
               ["@semantic-release/commit-analyzer", {
-                "preset": "angular",
-                "releaseRules": [
-                  {"breaking": true, "release": "major"},
-                  {"type": "feat", "release": "minor"},
-                  {"type": "fix", "release": "patch"}
+                preset: "angular",
+                releaseRules: [
+                  {breaking: true, release: "major"},
+                  {type: "feat", release: "minor"},
+                  {type: "fix", release: "patch"}
                 ]
               }],
               "@semantic-release/release-notes-generator",
               ["@semantic-release/exec", {
-                "prepareCmd": "sed -i \"s/__version__ = \\\".*\\\"/__version__ = \\\"${nextRelease.version}\\\"/\" src/radon/__init__.py"
+                prepareCmd: "sed -i 's/__version__ = \".*\"/__version__ = \"\${nextRelease.version}\"/' src/radon/__init__.py"
               }],
               ["@semantic-release/git", {
-                "assets": ["src/radon/__init__.py"],
-                "message": "chore(release): ${nextRelease.version} [skip ci]"
+                assets: ["src/radon/__init__.py"],
+                message: "chore(release): \${nextRelease.version} [skip ci]"
               }],
               "@semantic-release/github"
-            ]'
+            ]
+          };
+          EOF
+
+      - name: Run Semantic Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.MY_RELEASE_TOKEN }}
+        run: npx semantic-release
