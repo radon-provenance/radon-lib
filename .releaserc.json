@@ -4,29 +4,12 @@
     ["@semantic-release/commit-analyzer", {
       "preset": "angular",
       "releaseRules": [
-          { "breaking": true, "release": "major" },
-          { "type": "ci", "release": "patch" },
-          { "type": "docs", "release": "patch" },
-          { "type": "feat", "release": "minor" },
-          { "type": "fix", "release": "patch" }
+        { "breaking": true, "release": "major" },
+        { "type": "feat", "release": "minor" },
+        { "type": "fix", "release": "patch" }
       ]
     }],
-    
-    [
-      "@semantic-release/release-notes-generator",
-      {
-        "preset": "angular",
-        "presetConfig": {
-          "types": [
-            { "type": "ci", "section": "CI/CD", "hidden": false },
-            { "type": "docs", "section": "Docs", "hidden": false },
-            { "type": "feat", "section": "Features", "hidden": false },
-            { "type": "fix", "section": "Bug Fixes", "hidden": false }
-          ]
-        }
-      }
-    ],
-
+    "@semantic-release/release-notes-generator",
     ["@semantic-release/exec", {
       "prepareCmd": "sed -i 's/__version__ = \".*\"/__version__ = \"${nextRelease.version}\"/' src/radon/__init__.py"
     }],
