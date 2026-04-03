@@ -43,6 +43,9 @@ jobs:
             plugins: [
               ["@semantic-release/commit-analyzer", {
                 preset: "angular",
+                "parserOpts": {
+                  "noteKeywords": ["BREAKING CHANGE", "BREAKING CHANGES", "BREAKING"]
+                },
                 releaseRules: [
                   {breaking: true, release: "major"},
                   {type: "feat", release: "minor"},
