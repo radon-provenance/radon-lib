@@ -72,6 +72,8 @@ class User(Model):
     :param create_ts: The date/time for the creation of the user
     :type create_ts: :class:`columns.TimeUUID`
     """
+    
+    __db_table_name__ = "user"
 
     login = columns.Text(primary_key=True, required=True)
     password = columns.Text(required=True)

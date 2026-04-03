@@ -1,26 +1,24 @@
-# Dockerfile
-FROM python:3.11
+# Dockerfile for radon-admin image
+FROM python:3.13
 
-# Hostnames for dse and mqtt servers
-ARG DSE_HOST
-ARG MQTT_HOST
-
-ENV PYTHONUNBUFFERED 1
-ENV DSE_HOST=${DSE_HOST}
-ENV MQTT_HOST=${MQTT_HOST}
-ENV CQLENG_ALLOW_SCHEMA_MANAGEMENT 1
+ENV CQLENG_ALLOW_SCHEMA_MANAGEMENT=1
+ENV PYTHONUNBUFFERED=1
 
 # Install prerequisites
-RUN apt-get -y update &&  \
-    apt-get install -y nano less libldap2-dev libsasl2-dev && \
+RUN apt -y update && \
+    apt install -y libldap2-dev libsasl2-dev libev4 libev-dev && \
     pip install --upgrade pip && \
     apt clean
 
+# Install cqlsh
+RUN pip install cqlsh
+RUN echo 'alias cqlsh="cqlsh dse"' >> ~/.bashrc
+
 # Create destination folders
-RUN mkdir -p /code/radon-lib
+RUN mkdir /code
 
 # Install radon-lib
-COPY radon-lib /code/radon-lib
+COPY . /code/radon-lib
 WORKDIR /code/radon-lib
-RUN pip install -r requirements.txt
-RUN python setup.py develop
+RUN python -m pip install .
+

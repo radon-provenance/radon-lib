@@ -16,7 +16,7 @@ from cassandra.cqlengine import connection
 from cassandra.cqlengine.management import (
     create_keyspace_network_topology,
     drop_keyspace,
-     sync_table,
+    sync_table,
     create_keyspace_simple,
 )
 from cassandra.cluster import (
@@ -56,8 +56,19 @@ from radon.model.notification import (
 from radon.model.payload import (
     PayloadCreateGroupRequest,
     PayloadCreateUserRequest,
+    PayloadDeleteGroupRequest,
+    PayloadDeleteUserRequest,
 )
 from radon.model.microservices import Microservices
+
+TABLES_LIST = (
+    DataObject,
+    Group,
+    Notification,
+    User,
+    TreeNode,
+    Config,
+)
 
 
 def add_search_field(name, type):
@@ -90,23 +101,27 @@ def add_search_field(name, type):
     return True
     
 
-def connect():
+def connect(num_retries=5):
     """Connect to a Cassandra cluster.
     
     keyspace, hosts, strategy variables are used to configure the connection.
     See the cfg object in the :mod:`radon.model.config` module, .
+    If we don't want to wait too long we can limit the number of retries.
+    
+    :param num_retries: Number of retries before failing
+    :type num_retries: int
     
     :return: A boolean which indicates if the connection is successful
     :rtype: bool
     """
-    num_retries = 5
+    print("connect")
     retry_timeout = 2
  
     keyspace = cfg.dse_keyspace
     hosts = cfg.dse_host
     strategy = (cfg.dse_strategy,)
 
-    for _ in range(num_retries):
+    for i in range(num_retries):
         try:
             cfg.logger.info(
                 'Connecting to Cassandra keyspace "{2}" '
@@ -122,13 +137,20 @@ def connect():
             )
             return True
         except NoHostAvailable:
-            cfg.logger.warning(
-                "Unable to connect to Cassandra on {0}. Retrying in {1} seconds...".format(
-                    hosts,
-                    retry_timeout
+            if i < num_retries - 1:
+                cfg.logger.warning(
+                    "Unable to connect to Cassandra on {0}. Retrying in {1} seconds...".format(
+                        hosts,
+                        retry_timeout
+                    )
                 )
-            )
-            time.sleep(retry_timeout)
+                time.sleep(retry_timeout)
+            else:
+                cfg.logger.warning(
+                    "Unable to connect to Cassandra on {0}".format(
+                        hosts
+                    )
+                )
     return False
 
 
@@ -138,26 +160,36 @@ def create_default_fields():
         add_search_field(name, field_type)
 
 
-def create_default_users():
-    """Create some users and groups.
+
+def create_default_groups():
+    """Create some groups.
     
-    Users and groups are defined in DEFAULT_GROUPS and DEFAULT_USERS in the 
-    :mod:`radon.model.config` module, .
-    
+    Groups are defined in DEFAULT_GROUPS in the :mod:`radon.model.config` module.
     """
     for name in cfg.default_groups:
-        payload_json = {
-            "obj": { 
-                "name": name
-            },
-            "meta": {
-                "sender": "radon-lib"
-            }
-        }
-        Microservices.create_group(PayloadCreateGroupRequest(payload_json))
+        create_group(name)
         # Do we want to use the listener/web microservices loop for that ?
         # create_group_request(PayloadCreateGroupRequest(payload_json))
 
+
+def create_group(name):
+    """Create a group without using the listener"""
+    payload_json = {
+        "obj": { 
+            "name": name
+        },
+        "meta": {
+            "sender": "radon-lib"
+        }
+    }
+    Microservices.create_group(PayloadCreateGroupRequest(payload_json))
+
+
+def create_default_users():
+    """Create some users.
+    
+    Users are defined in DEFAULT_USERS in the :mod:`radon.model.config` module.
+    """
     for login, fullname, email, pwd, is_admin, groups in cfg.default_users:
         payload_json = {
                 "obj": { 
@@ -177,6 +209,21 @@ def create_default_users():
         # create_user_request(PayloadCreateUserRequest(payload_json))
 
 
+def create_user(login, pwd):
+    """Create a user without using the listener"""
+    payload_json = {
+        "obj": {
+            "login": login,
+            "password": pwd,
+        },
+        "meta": {
+            "sender": "radon-lib"
+        }
+    }
+    
+    Microservices.create_user(PayloadCreateUserRequest(payload_json))
+
+
 def create_root():
     """Create the root container
     
@@ -188,16 +235,9 @@ def create_root():
 
 def create_tables():
     """Create Cassandra tables for the different models"""
-    tables = (
-        DataObject,
-        Group,
-        Notification,
-        User,
-        TreeNode,
-        Config
-    )
+    
         
-    for table in tables:
+    for table in TABLES_LIST:
         cfg.logger.info('Syncing table "{0}"'.format(table.__name__))
         sync_table(table)
     
@@ -270,6 +310,59 @@ def create_tables():
         pass
 
 
+def check_keyspace():
+    """Check that the keyspace is created"""
+    cluster = connection.get_cluster()
+    ks_name = cfg.dse_keyspace
+    
+    return ks_name in cluster.metadata.keyspaces
+
+
+def check_tables():
+    """Check that the tables are created in the keyspace"""
+    cluster = connection.get_cluster()
+    ks_name = cfg.dse_keyspace
+
+    if ks_name not in cluster.metadata.keyspaces:
+        return False
+    
+    keyspace = cluster.metadata.keyspaces.get(ks_name)
+    
+    s_existing_tables = set(keyspace.tables.keys())
+    s_tables_to_create = set([el.__db_table_name__ for el in TABLES_LIST])
+    
+    if s_existing_tables != s_tables_to_create:
+        return False
+    
+    return True
+
+
+def create_keyspace():
+    """Create the keyspace and the tables if they don't exist"""
+    cluster = connection.get_cluster()
+    ks_name = cfg.dse_keyspace
+    print(ks_name)
+
+    if ks_name not in cluster.metadata.keyspaces:
+        repl_factor = cfg.dse_repl_factor
+        create_keyspace_simple(ks_name, repl_factor, True)
+    
+    try:
+        keyspace = cluster.metadata.keyspaces[ks_name]
+    except KeyError:
+        return False
+
+    s_existing_tables = set(keyspace.tables.keys())
+    s_tables_to_create = set([el.__db_table_name__ for el in TABLES_LIST])
+
+    if s_existing_tables != s_tables_to_create:
+        print("Creating Tables")
+        create_tables()
+        create_root()
+
+    return True
+
+
 def rebuild_index(): 
     """Reload the search index schema and rebuild the search index"""
     cluster = connection.get_cluster()
@@ -306,6 +399,32 @@ def rm_search_field(name):
     rebuild_index()
 
 
+def delete_group(name):
+    """Delete a group without using the listener"""
+    payload_json = {
+        "obj": { 
+            "name": name
+        },
+        "meta": {
+            "sender": "radon-lib"
+        }
+    }
+    Microservices.delete_group(PayloadDeleteGroupRequest(payload_json))
+
+
+def delete_user(login):
+    """Delete a user without using the listener"""
+    payload_json = {
+        "obj": { 
+            "login": login
+        },
+        "meta": {
+            "sender": "radon-lib"
+        }
+    }
+    Microservices.delete_user(PayloadDeleteUserRequest(payload_json))
+
+
 def destroy():
     """Destroy Cassandra keyspace. The keyspace contains all the tables."""
     keyspace = cfg.dse_keyspace
@@ -313,8 +432,25 @@ def destroy():
     drop_keyspace(keyspace)
 
 
+def init_keyspace():
+    if not connect():
+        return False
+    
+    cluster = connection.get_cluster()
+    keyspace = cfg.dse_keyspace
+    
+    if keyspace not in cluster.metadata.keyspaces:
+        if cfg.dse_strategy == "NetworkTopologyStrategy":
+            create_keyspace_network_topology(keyspace, dc_replication_map, True)
+        else:
+            create_keyspace_simple(keyspace, repl_factor, True)
+    create_tables()
+    create_root()
+    
+
+
 def initialise():
-    """Initialise the Cassandra connection
+    """Initialise the Cassandra database
     
     repl_factor, dc_replication_map, keyspace variables are used to configure 
     the connection. See the cfg object in the :mod:`radon.model.config` 
@@ -323,21 +459,23 @@ def initialise():
     :return: A boolean which indicates if the connection is successful
     :rtype: bool
     """
+    print("initialise 1")
     if not connect():
         return False
     repl_factor = cfg.dse_repl_factor
     dc_replication_map = cfg.dse_dc_replication_map
     keyspace = cfg.dse_keyspace
-     
+
     cluster = connection.get_cluster()
-    if keyspace in cluster.metadata.keyspaces:
-        # If the keyspace already exists we do not create it. Should we raise
-        # an error
-        return True
-    if cfg.dse_strategy == "NetworkTopologyStrategy":
-        create_keyspace_network_topology(keyspace, dc_replication_map, True)
-    else:
-        create_keyspace_simple(keyspace, repl_factor, True)
+    if keyspace not in cluster.metadata.keyspaces:
+        if cfg.dse_strategy == "NetworkTopologyStrategy":
+            create_keyspace_network_topology(keyspace, dc_replication_map, True)
+        else:
+            create_keyspace_simple(keyspace, repl_factor, True)
+    
+    create_tables()
+    create_root()
+    
  
     return True
 

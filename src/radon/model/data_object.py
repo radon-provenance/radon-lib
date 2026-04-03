@@ -56,6 +56,8 @@ class DataObject(Model):
     :param compressed: An option to compress the data bits
     :type compressed: :class:`columns.Boolean`
     """
+    
+    __db_table_name__ = "data_object"
 
     # The 'name' of the object
     uuid = columns.Text(default=default_cdmi_id, required=True, partition_key=True)

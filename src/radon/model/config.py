@@ -15,14 +15,17 @@
 
 import os
 
-from dotenv import load_dotenv
+from dotenv import (
+    find_dotenv,
+    load_dotenv
+)
 
 from cassandra.cqlengine import columns
 from cassandra.cqlengine.models import connection, Model
 from cassandra.query import SimpleStatement
 
 from radon.log import init_logger
-
+from radon.util import csv_to_list
 
 
 ENV_DSE_HOST_VAR = "DSE_HOST"
@@ -183,7 +186,7 @@ class LocalConfig(object):
         # List of host address for the DSE cluster
         dse_host_var = os.environ.get(ENV_DSE_HOST_VAR)
         if dse_host_var:
-            self.dse_host = dse_host_var.split(" ")
+            self.dse_host = csv_to_list(dse_host_var)
         else:
             self.dse_host = [DEFAULT_DSE_HOST,]
         # Cassandra keyspace
@@ -291,6 +294,8 @@ class Config(Model):
     :type value: :class:`columns.Text`    
     
     """
+    
+    __db_table_name__ = "config"
 
     module = columns.Text(partition_key=True)
     option = columns.Text(primary_key=True)
@@ -307,11 +312,15 @@ class Config(Model):
             list_index.append((field.key, field.value))
         return list_index
 
-
 # Load environment variables to initialize config with the user-defined value
 # if they exist
+#load_dotenv(find_dotenv(usecwd=True))
 load_dotenv()
-cfg = LocalConfig()
 
+
+print("DSE_HOST", os.environ.get("DSE_HOST"))
+print("MQTT_HOST", os.environ.get("MQTT_HOST"))
+
+cfg = LocalConfig()
 
 

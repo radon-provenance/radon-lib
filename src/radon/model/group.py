@@ -49,6 +49,8 @@ class Group(Model):
     :type uuid: :class:`columns.Text`
     :param name: The group name, used as the primary key
     :type name: :class:`columns.Text`"""
+    
+    __db_table_name__ = "group"
 
     name = columns.Text(primary_key=True, required=True)
     uuid = columns.Text(default=default_uuid)

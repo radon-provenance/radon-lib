@@ -36,12 +36,14 @@ from radon.model.errors import (
 from radon.model.notification import (
     create_resource_fail,
     create_resource_success,
+    create_resource_init,
     delete_resource_success,
     update_resource_success
 )
 from radon.model.payload import (
     PayloadCreateResourceFail,
     PayloadCreateResourceSuccess,
+    PayloadCreateResourceInit,
     PayloadDeleteResourceSuccess,
     PayloadUpdateResourceSuccess
 )
@@ -139,6 +141,19 @@ class Resource(ABC):
         :return: The new Resource object
         :rtype: :class:`radon.model.resource.Resource`
         """
+        payload_json = {
+            "obj": {
+                "name" : name,
+                "container": container,
+                "path": merge(container, name), 
+            },
+            "meta": {
+                "sender": sender,
+            }
+        }
+        create_resource_init(PayloadCreateResourceInit(payload_json))
+        
+        
         from radon.model.collection import Collection
         if not container.endswith('/'):
             container += '/'
@@ -208,16 +223,15 @@ class Resource(ABC):
         if cdmi_acl:
             new.update_acl_cdmi(cdmi_acl)
 
-        payload_json = {
-            "obj": new.mqtt_get_state(),
-            'meta' : {
-                "sender": sender
-            }
-        }
-        if req_id:
-            payload_json['meta']['req_id'] = req_id
-
-        create_resource_success(PayloadCreateResourceSuccess(payload_json))
+        # payload_json = {
+        #     "obj": new.mqtt_get_state(),
+        #     'meta' : {
+        #         "sender": sender
+        #     }
+        # }
+        # if req_id:
+        #     payload_json['meta']['req_id'] = req_id
+        # create_resource_success(PayloadCreateResourceSuccess(payload_json))
 
         return new
 
@@ -427,6 +441,17 @@ class Resource(ABC):
         :rtype: dict
         """
         return meta_cassandra_to_cdmi(self.node.sys_meta)
+
+    
+    def get_container(self):
+        """
+        Return the container of the resource (parent collection)
+        
+        :return: The path of the container
+        :rtype: str
+        """
+        return self.container
+        
 
 
     def get_cdmi_user_meta(self):

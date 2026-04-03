@@ -65,6 +65,8 @@ class TreeNode(Model):
       associated ACE
     :type acl: :class:`columns.Map(columns.Text, columns.UserDefinedType(Ace))`
     """
+    
+    __db_table_name__ = "tree_node"
 
     # Partitioned by container, clustered by name, so all files for a directory
     # are in the same partition

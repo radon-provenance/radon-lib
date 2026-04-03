@@ -29,6 +29,7 @@ from radon.model.payload import (
     PayloadUpdateGroupFail,
     PayloadCreateResourceRequest,
     PayloadCreateResourceFail,
+    PayloadCreateResourceSuccess,
     PayloadDeleteResourceRequest,
     PayloadDeleteResourceFail,
     PayloadUpdateResourceRequest,
@@ -191,6 +192,15 @@ class Microservices(object):
         if resc:
             if data:
                 resc.put(data)
+            
+            payload_json = {
+                "obj": resc.mqtt_get_state(),
+                'meta' : {
+                    "sender": params['sender']
+                }
+            }
+            create_resource_success(PayloadCreateResourceSuccess(payload_json))
+            
             return (True, resc, "Resource created")
         else:
             return (False, None, "Resource not created")
