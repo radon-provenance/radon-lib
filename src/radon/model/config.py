@@ -317,10 +317,6 @@ class Config(Model):
 #load_dotenv(find_dotenv(usecwd=True))
 load_dotenv()
 
-
-print("DSE_HOST", os.environ.get("DSE_HOST"))
-print("MQTT_HOST", os.environ.get("MQTT_HOST"))
-
 cfg = LocalConfig()
 
 

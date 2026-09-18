@@ -114,7 +114,6 @@ def connect(num_retries=5):
     :return: A boolean which indicates if the connection is successful
     :rtype: bool
     """
-    print("connect")
     retry_timeout = 2
  
     keyspace = cfg.dse_keyspace
@@ -341,7 +340,6 @@ def create_keyspace():
     """Create the keyspace and the tables if they don't exist"""
     cluster = connection.get_cluster()
     ks_name = cfg.dse_keyspace
-    print(ks_name)
 
     if ks_name not in cluster.metadata.keyspaces:
         repl_factor = cfg.dse_repl_factor
@@ -459,7 +457,6 @@ def initialise():
     :return: A boolean which indicates if the connection is successful
     :rtype: bool
     """
-    print("initialise 1")
     if not connect():
         return False
     repl_factor = cfg.dse_repl_factor

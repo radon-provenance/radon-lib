@@ -143,6 +143,7 @@ class RadonApplication():
 
     def init(self):
         """Create the tables"""
+        print("init")
         create_tables()
         create_root()
 
@@ -391,7 +392,7 @@ class RadonApplication():
                 self.print_error(MSG_USER_NOT_EXIST.format(name))
         else:
             for user in User.objects.all():
-                print(user.name)
+                print(user.login)
 
 
     def mkdir(self, args):

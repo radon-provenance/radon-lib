@@ -1,6 +1,14 @@
 # Dockerfile for radon-admin image
-FROM python:3.13
+FROM python:3.11
 
+ARG DSE_HOST
+ARG MQTT_HOST
+
+# Set environment variables 
+
+# Hostnames for DSE (Cassandra) and MQTT
+ENV DSE_HOST=${DSE_HOST}
+ENV MQTT_HOST=${MQTT_HOST}
 ENV CQLENG_ALLOW_SCHEMA_MANAGEMENT=1
 ENV PYTHONUNBUFFERED=1
 
